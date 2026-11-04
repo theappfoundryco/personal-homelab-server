@@ -242,7 +242,7 @@ def find_app(text):
              "home page": "landing", "dashboard": "homepage", "voice": "whisper"}
     return next((v for k, v in alias.items() if k in t), None)
 
-RELEASES = "https://api.github.com/repos/theappfoundryco/personal-homelab-server/releases/latest"
+REPO = "theappfoundryco/personal-homelab-server"
 UPDATE_STALE = 1200  # an update that has not changed the version after this many seconds counts as failed
 
 
@@ -254,10 +254,10 @@ def vtuple(v):
 
 @cached(600)
 def latest_release():
-    """The newest published release, or None when it cannot be read (offline, rate limited, or the project is not public yet)."""
+    """The newest release tag (what `homelab update` follows on the stable channel; a pre-release such as v1.0.0-rc1 does not count), or None when it cannot be read."""
     try:
-        r = http(RELEASES, timeout=8, headers={"Accept": "application/vnd.github+json"})
-        return {"tag": r["tag_name"], "url": r.get("html_url", ""), "notes": (r.get("body") or "").strip()[:1500]} if vtuple(r.get("tag_name")) else None
+        tags = [t["name"] for t in http(f"https://api.github.com/repos/{REPO}/tags?per_page=100", timeout=8, headers={"Accept": "application/vnd.github+json"}) if vtuple(t.get("name"))]
+        return {"tag": max(tags, key=vtuple), "url": f"https://github.com/{REPO}/releases/tag/{max(tags, key=vtuple)}", "notes": ""} if tags else None
     except Exception:
         return None
 
