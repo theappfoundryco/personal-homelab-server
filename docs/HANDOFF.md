@@ -50,6 +50,7 @@ Ideas that hold it together:
 python3 -W ignore -m unittest discover -s tests   # unit tests, about a minute
 make check                                        # data guard, personal values, design tokens, image pins, gitleaks
 make test                                         # golden API tests and bot router tests
+python3 scripts/check-needs.py                     # undefined names, the way modules get theirs from host.need (pip install ruff)
 make test-e2e                                     # dashboard smoke tests on demo data (pip install playwright pyyaml; playwright install chromium)
 make update-golden                                # re-record the golden API replies (review the git diff first)
 make update-baselines                             # re-record the phone-width screenshots (review them first)

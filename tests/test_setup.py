@@ -189,6 +189,7 @@ class Routes(unittest.TestCase):
         self.restarted = threading.Event()
         self.setup = setup.Setup(d, restart=self.restarted.set, log=lambda m: None, **kw)
         hw = hardware.probe(**probe)
+        hw["disk_free_gb"] = 500  # the same everywhere, not the free space of whatever machine runs the tests
         from core.hardware import profiles
         view = {"hardware": hw, "summary": hardware.describe(hw), "recommendation": profiles.recommend(hw)}
         mods = [{"name": "gym", "title": "Gym", "description": "", "default": True, "requires": [], "why_off": "", "unavailable": False},
