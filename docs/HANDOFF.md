@@ -12,7 +12,7 @@ A private, self-hosted assistant for the day: a dashboard (notes, journal, gym, 
 - Install: `get.sh` (one line, `curl ... | bash`) downloads the project with git and runs `install.sh`. It starts on the newest `v*` tag (stable) or on `main` (`HL_CHANNEL=edge`).
 - Update: `homelab update` needs a clean git tree, fetches, refuses a diverged copy, takes a snapshot backup, stops services, fast-forwards, runs data migrations, rebuilds, waits for `/api/bot/doctor`, and rolls back by itself on any failure. Channels: `stable` (highest release tag) and `edge` (`origin/main`).
 - Setup wizard on first run: name and time zone, machine, modules, AI engine, Telegram, access. Every step can be skipped.
-- Dashboard updates: Settings, Updates compares this version with the newest GitHub release (cached 10 minutes) and an Update now button asks the host helper to run `homelab update --yes`. The page polls until the new version answers, then reloads. The release lookup only works once the repository is public.
+- Dashboard updates: the dashboard checks for a newer release tag when it opens (GitHub tags API, cached 10 minutes) and shows a popup with the release notes in three kinds: Security (`security:`), New (`feat:`) and Fixed (`fix:`). The notes are the commit subjects between the two tags, from the GitHub compare API, kept in `release-notes.json` in the data folder because tags never move. Update now asks the host helper to run `homelab update --yes` and shows the steps until the new version answers, then reloads. Later hides it until the next version (per browser). After an update, Home shows an Updated card until it is read or closed (`version-seen.json`; a fresh install starts at its own version, so it shows nothing). Settings, Updates shows the same notes and the last five releases. Without the helper the popup shows the commands instead, and offline it shows nothing. Code: `modules/server/__init__.py` (`parse_notes`, `release_notes`, `update_state`), `stack/landing/site/js/update.js`, `css/update.css`.
 - Custom apps: you can add your own Docker apps from Settings or the command line, each in its own compose project.
 - CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by hand (see "Cut a release" below), and images are built and signed by `images.yml`. The Release workflow (release-please) is switched off because the organization does not let Actions open pull requests. Turn it on with `gh workflow enable Release` once that is allowed.
 
@@ -72,7 +72,7 @@ git switch main && git pull
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-`homelab update` (stable channel) and the dashboard's Updates page follow the newest `vX.Y.Z` tag, so the tag is what makes a release exist. Optionally add notes with `gh release create v0.2.0 --generate-notes`.
+`homelab update` (stable channel) and the dashboard's Updates page follow the newest `vX.Y.Z` tag, so the tag is what makes a release exist. The release notes people see are the commit subjects since the previous tag (`security:`, `feat:` and `fix:` only), so read `git log --oneline v0.1.0..main` before tagging and make sure each line reads well. Optionally add a GitHub Release with `gh release create v0.2.0 --generate-notes`; the dashboard does not need it.
 
 ## What has been verified
 
@@ -87,7 +87,7 @@ git tag v0.2.0 && git push origin v0.2.0
 - **Custom apps on real Docker.** Adding, starting and removing your own app has only run against fake tools.
 - **Homebrew record and purge** (what the installer installed, and removing it again) on a real Mac.
 - **launchd and systemd.** The host helper, autostart and the reboot path have never run for real on both systems.
-- **The dashboard Update button** has run only against fake helpers and the demo page, never a real update.
+- **The dashboard Update button and the update popup** have run only against fake helpers and the demo page, never a real update. 0.1.0 and 0.1.1 have no popup, so the move to 0.1.2 goes through `homelab update` or the Update now button in Settings, Updates (0.1.1 has it). The first real popup is from 0.1.2 to the next release.
 - **`homelab update`, rollback and `restore`** against a real remote or a real failure.
 - **GitHub workflows.** None has run yet. Action versions in `.github/workflows` were written from memory and are unchecked.
 - **Pinned image versions** (n8n, Grafana, Open WebUI) were never started together. Check them and take `homelab backup` first.

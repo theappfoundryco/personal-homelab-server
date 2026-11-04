@@ -12,4 +12,4 @@
 - [ ] No em dashes
 - [ ] Screenshots use demo data only
 - [ ] Budget calculations untouched (or agreed in an issue first)
-- [ ] The title starts with `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ci:` or `chore:`
+- [ ] The title starts with `feat:`, `fix:`, `security:`, `docs:`, `refactor:`, `test:`, `ci:` or `chore:`

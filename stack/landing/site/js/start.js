@@ -10,10 +10,10 @@ function sheetDrag(wrap, close) {
   };
   wrap.querySelectorAll('.grab, .sheet-head').forEach((el) => { el.onpointerdown = start; el.onpointermove = move; el.onpointerup = end; el.onpointercancel = end; });
 }
-sheetDrag($('#sheet'), closeSheet); if (typeof jmsClose === 'function') sheetDrag($('#jms'), jmsClose);
+sheetDrag($('#sheet'), closeSheet); sheetDrag($('#upd'), updClose); if (typeof jmsClose === 'function') sheetDrag($('#jms'), jmsClose);
 
 // ---------- Start ----------
-CFG_READY.then(() => { tick(); weather(); loadExtras(); if (typeof status === 'function') status(); });
+CFG_READY.then(() => { tick(); weather(); loadExtras(); if (typeof status === 'function') status(); setTimeout(updInit, 1500); });  // the update check waits for the wizard to decide whether it opens
 setInterval(tick, 10000);
 setInterval(() => { if (!document.hidden && typeof status === 'function') status(); }, 30000);
 setInterval(() => { if (!document.hidden) loadExtras(); }, 5 * 60000);

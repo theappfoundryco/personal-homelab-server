@@ -28,6 +28,7 @@ Mistakes that already happened in this project, so they do not happen twice. Eac
 ## Images and updates
 - **`:latest` or an unpinned image tag.** Pin every image to an exact version. `scripts/check-pins.py` enforces it.
 - **Accepting a major version bump unread.** n8n, Grafana and Open WebUI migrate their data on first start, and some cannot go back. Read the notes and take `homelab backup` first.
+- **A commit sentence nobody outside the code understands.** Commit subjects are the release notes people read in the update popup. Use the right prefix (`security:`, `feat:`, `fix:`) and say what changes for them.
 - **Auto-updating behind `homelab update`.** Watchtower is off by default because it moves pinned versions on its own.
 
 ## Privacy and safety
