@@ -87,7 +87,7 @@ git tag v0.2.0 && git push origin v0.2.0
 - **Custom apps on real Docker.** Adding, starting and removing your own app has only run against fake tools.
 - **Homebrew record and purge** (what the installer installed, and removing it again) on a real Mac.
 - **launchd and systemd.** The host helper, autostart and the reboot path have never run for real on both systems.
-- **The dashboard Update button and the update popup** have run only against fake helpers and the demo page, never a real update. The first real test is the update from 0.1.1 to the next release (0.1.0 has no popup, so 0.1.0 to 0.1.1 goes through `homelab update`).
+- **The dashboard Update button and the update popup** have run only against fake helpers and the demo page, never a real update. 0.1.0 and 0.1.1 have no popup, so the move to 0.1.2 goes through `homelab update` or the Update now button in Settings, Updates (0.1.1 has it). The first real popup is from 0.1.2 to the next release.
 - **`homelab update`, rollback and `restore`** against a real remote or a real failure.
 - **GitHub workflows.** None has run yet. Action versions in `.github/workflows` were written from memory and are unchecked.
 - **Pinned image versions** (n8n, Grafana, Open WebUI) were never started together. Check them and take `homelab backup` first.
