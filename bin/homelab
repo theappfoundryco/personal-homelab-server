@@ -10,4 +10,6 @@ done
 HERE="$(cd "$(dirname "$SRC")/.." && pwd)"
 command -v python3 >/dev/null 2>&1 || { echo "  stop  Python 3 is needed. On a Mac: brew install python. On Linux: sudo apt install python3 python3-yaml"; exit 1; }
 case "${1:-}" in help|-h|--help) set -- --help ;; esac
-PYTHONPATH="$HERE" exec python3 -W ignore -m core.cli "$@"
+# Its own folder goes first: "python3 -m" alone would look in the current folder first, so running it from inside another copy
+# of the project would run that copy instead.
+PYTHONPATH="$HERE" exec python3 -W ignore -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("core.cli", run_name="__main__", alter_sys=True)' "$HERE" "$@"

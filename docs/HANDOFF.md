@@ -69,9 +69,12 @@ Releases are manual for now. On `main` after the change is merged:
 ```bash
 # 1. a pull request that sets VERSION in core/version.py and ".": in .release-please-manifest.json to the new number
 # 2. after it is merged, tag it
-git switch main && git pull
-git tag v0.2.0 && git push origin v0.2.0
+git switch main && git pull --ff-only origin main
+git show HEAD:core/version.py | grep -q '"0.2.0"' && git tag v0.2.0 && git push origin v0.2.0
+git ls-remote --tags origin v0.2.0   # must print the tag: a release only exists once GitHub has it
 ```
+
+Tag from your development clone, never from the install folder (`~/personal-homelab-server`): the install is downloaded read-only, so a push from it fails and the tag stays on your machine only.
 
 `homelab update` (stable channel) and the dashboard's Updates page follow the newest `vX.Y.Z` tag, so the tag is what makes a release exist. The release notes people see are the commit subjects since the previous tag (`security:`, `feat:` and `fix:` only), so read `git log --oneline v0.1.0..main` before tagging and make sure each line reads well. Optionally add a GitHub Release with `gh release create v0.2.0 --generate-notes`; the dashboard does not need it.
 
