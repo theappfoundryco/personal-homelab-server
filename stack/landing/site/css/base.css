@@ -13,7 +13,7 @@ svg { display: block; }
 
 main { max-width: 720px; margin: 0 auto;
   padding: calc(14px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-.view[hidden] { display: none; }
+.view[hidden], .label[hidden] { display: none; }  /* .label is a flex row, which would otherwise win over hidden */
 .view { animation: fade .18s ease; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(24px); opacity: 0; } }

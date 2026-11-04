@@ -41,7 +41,7 @@ const appHTML = (a, i) => `<button class="card app" data-app="${i}">
   <span><b>${esc(a.name)}</b><small>${esc(a.sub)}</small></span></button>`;
 let ALL = [...APPS, ...TOOLS];
 // The tiles: built-in ones only for apps you installed (minus any you hid in Settings), then your own, in Everyday apps and Tools.
-// The list ends with Add apps, which opens Settings, Apps. If the app list can't be read, every built-in tile shows, as before.
+// The list ends with Add apps, which opens Settings, Apps (one wide button, with no heading, while there are no apps). If the app list can't be read, every built-in tile shows, as before.
 let tilesInstalled = null, tilesLayout = {}, tilesCustom = [];  // tilesCustom: the apps you added yourself (Settings, Apps, Add your own)
 const ADD_TILE = { name: 'Add apps', sub: 'Choose what to install', add: true };
 const addHTML = () => `<button class="card app app-add" data-app-more><span class="ic"><b>+</b></span><span><b>${ADD_TILE.name}</b><small>${ADD_TILE.sub}</small></span></button>`;
@@ -55,6 +55,8 @@ function renderTiles(layout = tilesLayout) {
   $('#apps').innerHTML = apps.map((a, i) => appHTML(a, i)).join('') + addHTML();
   $('#tools').innerHTML = tools.map((a, i) => appHTML(a, i + apps.length)).join('');
   $('#tools').hidden = $('#tools').previousElementSibling.hidden = !tools.length;
+  $('#apps').previousElementSibling.hidden = !apps.length;  // a heading only once it has an app under it; until then Add apps is one wide button
+  $('#apps .app-add').classList.toggle('wide', !apps.length);
   paintApps();
 }
 async function loadInstalled() {

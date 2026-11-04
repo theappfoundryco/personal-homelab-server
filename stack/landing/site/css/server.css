@@ -83,6 +83,7 @@
 .app b, .app small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  /* one line each: every app card is the same height */
 .app-add { background: transparent; box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
 .app-add .ic b { font-size: var(--t-xl); color: var(--muted); }
+.app-add.wide { grid-column: 1 / -1; }
 @media (min-width: 640px) { .apps { grid-template-columns: repeat(3, 1fr); } }
 
 /* Status bar area: content softly blurs away under the clock and Dynamic Island, like Apple's own apps.
