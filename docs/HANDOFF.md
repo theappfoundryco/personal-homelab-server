@@ -15,7 +15,7 @@ A private, self-hosted assistant for the day: a dashboard (notes, journal, gym, 
 - Dashboard updates: the dashboard checks for a newer release tag when it opens (GitHub tags API, cached 10 minutes) and shows a popup with the release notes in three kinds: Security (`security:`), New (`feat:`) and Fixed (`fix:`). The notes are the commit subjects between the two tags, from the GitHub compare API, kept in `release-notes.json` in the data folder because tags never move. Update now asks the host helper to run `homelab update --yes` and shows the steps until the new version answers, then reloads. Later hides it until the next version (per browser). After an update, Home shows an Updated card until it is read or closed (`version-seen.json`; a fresh install starts at its own version, so it shows nothing). Settings, Updates shows the same notes and the last five releases. Without the helper the popup shows the commands instead, and offline it shows nothing. Code: `modules/server/__init__.py` (`parse_notes`, `release_notes`, `update_state`), `stack/landing/site/js/update.js`, `css/update.css`.
 - Health (0.2.0): medicines are a list in `sg.json` (`meds`), each with how often (every day at up to six times, every week on a weekday, every 2 weeks from a first date, every month on day 1 to 28), an optional stop after N, and reminders on or off. A dose is ticked in the log as `<id>@HHMM`, by meds day (4 AM to 4 AM). The schedule maths is plain functions in `modules/health/meds.py`. Migration `0002_medicines` turns the old morning, lunch and night slots and weekly courses into medicines and keeps their ticks. Telegram reminders (Done, 5 min, 15 min) only go out while the bot is connected: the form hides the switch, the API refuses it, and the reminder loop skips. Buttons sent before 0.2.0 still work. The Health tab shows the first name from Settings, or User.
 - Custom apps: you can add your own Docker apps from Settings or the command line, each in its own compose project.
-- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by hand (see "Cut a release" below), and images are built and signed by `images.yml`. The Release workflow (release-please) is switched off because the organization does not let Actions open pull requests. Turn it on with `gh workflow enable Release` once that is allowed.
+- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. **Cut release** (`cut-release.yml`) tags a release when `core/version.py` on `main` names a new version, writes the notes, and calls `images.yml` to build and sign the images.
 
 ## Architecture map
 
@@ -64,19 +64,7 @@ The unit tests and `make check` run on both macOS and Linux. The maintainer has 
 
 ## Cut a release
 
-Releases are manual for now. On `main` after the change is merged:
-
-```bash
-# 1. a pull request that sets VERSION in core/version.py and ".": in .release-please-manifest.json to the new number
-# 2. after it is merged, tag it
-git switch main && git pull --ff-only origin main
-git show HEAD:core/version.py | grep -q '"0.2.0"' && git tag v0.2.0 && git push origin v0.2.0
-git ls-remote --tags origin v0.2.0   # must print the tag: a release only exists once GitHub has it
-```
-
-Tag from your development clone, never from the install folder (`~/personal-homelab-server`): the install is downloaded read-only, so a push from it fails and the tag stays on your machine only.
-
-`homelab update` (stable channel) and the dashboard's Updates page follow the newest `vX.Y.Z` tag, so the tag is what makes a release exist. The release notes people see are the commit subjects since the previous tag (`security:`, `feat:` and `fix:` only), so read `git log --oneline v0.1.0..main` before tagging and make sure each line reads well. Optionally add a GitHub Release with `gh release create v0.2.0 --generate-notes`; the dashboard does not need it.
+Raise `VERSION` in `core/version.py` in a pull request; merging it is the release (the **Cut release** workflow tags it and writes the notes). The full steps, including several branches going into one release, are in [docs/RELEASING.md](RELEASING.md). `python3 scripts/release.py preview` shows what a release would say before you merge.
 
 ## What has been verified
 

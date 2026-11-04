@@ -90,9 +90,9 @@ class Workflows(unittest.TestCase):
             for name, job in yaml.safe_load(open(f))["jobs"].items():
                 perms = job.get("permissions") or {}
                 if perms.get("packages") == "write" or perms.get("id-token") == "write":
-                    self.assertIn(os.path.basename(f), ("images.yml", "release.yml"))
+                    self.assertIn(os.path.basename(f), ("images.yml", "cut-release.yml"))
                 self.assertNotIn("write-all", str(perms))
-                if os.path.basename(f) != "release.yml":
+                if os.path.basename(f) != "cut-release.yml":
                     self.assertNotEqual(perms.get("contents"), "write", f)
 
     def test_images_are_multi_arch_signed_with_an_sbom_and_stay_unpushed_on_pull_requests(self):
@@ -107,21 +107,43 @@ class Workflows(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'", text)
         self.assertIn("workflow_call", triggers(wf))
 
-    def test_release_builds_images_only_when_a_release_was_made(self):
-        wf = workflow("release.yml")
-        self.assertIn("release_created == 'true'", wf["jobs"]["images"]["if"])
-        self.assertEqual(wf["jobs"]["images"]["uses"], "./.github/workflows/images.yml")
-        self.assertEqual(wf["jobs"]["images"]["needs"], "release-please")
-
+    def test_a_release_is_cut_when_the_version_changes_on_main_and_only_then_are_images_built(self):
+        wf = workflow("cut-release.yml")
+        on = triggers(wf)
+        self.assertEqual((on["push"]["branches"], on["push"]["paths"]), (["main"], ["core/version.py"]))
+        self.assertEqual(wf["permissions"], {"contents": "read"})
+        self.assertEqual(wf["jobs"]["release"]["permissions"], {"contents": "write"})  # only the job that tags may write
+        self.assertIn("new == 'true'", wf["jobs"]["images"]["if"])
+        self.assertEqual((wf["jobs"]["images"]["needs"], wf["jobs"]["images"]["uses"]), ("release", "./.github/workflows/images.yml"))
+        self.assertFalse(os.path.exists(os.path.join(ROOT, ".github", "workflows", "release.yml")))  # release-please is gone
 
 class Config(unittest.TestCase):
-    def test_release_please_files_agree_and_start_before_one_point_zero(self):
-        cfg = json.load(open(os.path.join(ROOT, "release-please-config.json")))
-        man = json.load(open(os.path.join(ROOT, ".release-please-manifest.json")))
-        self.assertEqual(set(cfg["packages"]), set(man))
-        self.assertRegex(man["."], r"^0\.\d+\.\d+$")
-        self.assertTrue(cfg["bump-minor-pre-major"])
-        self.assertFalse(cfg["include-component-in-tag"])  # tags look like v0.1.0, which `homelab update` reads
+    def test_the_release_script_tags_only_a_new_higher_version_and_writes_notes_by_kind(self):
+        import importlib.util, shutil, subprocess
+        d = tempfile.mkdtemp()
+        g = lambda *a: subprocess.run(["git", *a], cwd=d, check=True, capture_output=True, text=True)
+        g("init", "-q", "-b", "main"); g("config", "user.email", "t@example.com"); g("config", "user.name", "t")
+        os.makedirs(os.path.join(d, "core")); os.makedirs(os.path.join(d, "scripts"))
+        shutil.copy(os.path.join(ROOT, "core", "release_notes.py"), os.path.join(d, "core"))
+        shutil.copy(os.path.join(ROOT, "scripts", "release.py"), os.path.join(d, "scripts"))
+        open(os.path.join(d, "core", "__init__.py"), "w").close()
+        def bump(v, *msgs):
+            for m in msgs:
+                open(os.path.join(d, "f.txt"), "a").write(m); g("add", "-A"); g("commit", "-q", "-m", m)
+            open(os.path.join(d, "core", "version.py"), "w").write(f'VERSION = "{v}"\n'); g("add", "-A"); g("commit", "-q", "-m", f"release: {v}")
+        run = lambda *a: subprocess.run(["python3", os.path.join(d, "scripts", "release.py"), *a], cwd=d, capture_output=True, text=True)
+        bump("0.1.0", "feat: the start")
+        self.assertEqual(run("check").stdout, "tag=v0.1.0\nnew=true\n")
+        g("tag", "v0.1.0")
+        self.assertEqual(run("check").stdout, "tag=v0.1.0\nnew=false\n")  # already released: nothing to do
+        bump("0.2.0", "feat: add medicines", "fix: stop a crash", "security: lock the PIN", "docs: typo", "Merge branch x")
+        self.assertIn("Merging this makes release v0.2.0", run("preview").stdout)
+        g("tag", "v0.2.0")
+        self.assertEqual(run("notes", "v0.2.0").stdout.strip(), "### Security\n- Lock the PIN.\n\n### New\n- Add medicines.\n\n### Fixed\n- Stop a crash.")
+        bump("0.1.5")
+        r = run("check")
+        self.assertEqual(r.returncode, 1)  # a version that went down is refused
+        self.assertIn("older than the newest release v0.2.0", r.stderr)
 
     def test_renovate_is_valid_and_guards_major_updates(self):
         cfg = json.load(open(os.path.join(ROOT, "renovate.json")))
@@ -134,8 +156,8 @@ class Config(unittest.TestCase):
 
     def test_no_em_dashes_in_the_new_files(self):
         dash = chr(0x2014)
-        for rel in ("renovate.json", "release-please-config.json", "scripts/check-pins.py", "stack/compose.yaml", "stack/landing/Dockerfile", "stack/telegram/Dockerfile",
-                    ".github/workflows/images.yml", ".github/workflows/release.yml", ".github/workflows/ci.yml"):
+        for rel in ("renovate.json", "scripts/release.py", "core/release_notes.py", "scripts/check-pins.py", "stack/compose.yaml", "stack/landing/Dockerfile", "stack/telegram/Dockerfile",
+                    ".github/workflows/images.yml", ".github/workflows/cut-release.yml", ".github/workflows/ci.yml"):
             self.assertNotIn(dash, open(os.path.join(ROOT, rel)).read(), rel)
 
 
