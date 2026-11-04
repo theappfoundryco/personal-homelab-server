@@ -71,16 +71,16 @@ class Agent:
             out |= set(text.split()) if rc == 0 else set()
         return out
 
-    def _spawn(self):
+    def _spawn(self):  # unbuffered (-u): a file is block-buffered, so without it the log stayed empty until the update ended
         log = open(os.path.join(self.data, "update.log"), "ab")
-        return subprocess.Popen([self.python, "-W", "ignore", "-m", "core.cli", "update", "--yes"], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root},
+        return subprocess.Popen([self.python, "-u", "-W", "ignore", "-m", "core.cli", "update", "--yes"], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root, "PYTHONUNBUFFERED": "1"},
                                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
 
     def _spawn_apps(self, action, app):
         """Adding an app can download for minutes, so it runs on its own; progress goes to apps.log."""
         log = open(os.path.join(self.data, "apps.log"), "ab")
         args = ["access", app] if action == "access" else ["apps", action, app]
-        return subprocess.Popen([self.python, "-W", "ignore", "-m", "core.cli", *args], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root},
+        return subprocess.Popen([self.python, "-u", "-W", "ignore", "-m", "core.cli", *args], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root, "PYTHONUNBUFFERED": "1"},
                                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
 
     def handle(self, text):
