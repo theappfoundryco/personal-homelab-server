@@ -161,7 +161,11 @@ class Installer(unittest.TestCase):
         self.assertIn("compose up", calls)
 
     def test_a_mac_with_a_leftover_docker_command_and_nothing_to_run_it_gets_colima(self):
-        self.stub("brew", "colima", table=EXTRA)  # the docker command is there (a previous Colima was removed), but no Colima, OrbStack or Docker Desktop
+        self.stub("brew", table=EXTRA)  # the docker command is there (a previous Colima was removed), but no Colima, OrbStack or Docker Desktop
+        brew = os.path.join(self.bin, "brew")
+        open(brew, "a").write('\ncase "$1" in install) cp "$FAKE_BIN/../colima.src" "$FAKE_BIN/colima";; esac\n')  # brew install now brings Colima too
+        open(os.path.join(self.tmp, "colima.src"), "w").write("#!/bin/sh\n" + EXTRA["colima"] + "\n")
+        os.chmod(os.path.join(self.tmp, "colima.src"), 0o755)
         for pl in ("docker-compose", "docker-buildx"):
             path = os.path.join(self.tmp, "brew", "opt", pl, "bin", pl)
             os.makedirs(os.path.dirname(path))
