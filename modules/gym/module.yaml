@@ -1,0 +1,13 @@
+name: gym
+title: "Gym"
+description: "Log workouts: training days, exercises, sets and body weight, with a history and progress charts."
+version: 0.1.0
+default: true
+requires: []
+optional: []
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  tab: { id: gym, title: Gym, icon: dumbbell }
+  web: [view.js]
+  home_cards: []

@@ -1,0 +1,12 @@
+owner:
+  name: Alex
+timezone: UTC
+home:
+  city: Testville
+  country: Nowhere
+  lat: 10.0
+  lon: 20.0
+  tz: UTC
+world_clock:
+  - {label: "Paris", tz: "Europe/Paris"}
+  - {label: "Tokyo", tz: "Asia/Tokyo"}

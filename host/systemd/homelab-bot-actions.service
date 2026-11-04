@@ -1,0 +1,5 @@
+[Unit]
+Description=Carry out Telegram bot actions (restart app, reboot)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-bot-actions

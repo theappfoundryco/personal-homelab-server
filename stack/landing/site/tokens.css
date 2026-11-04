@@ -1,0 +1,51 @@
+/* Design tokens: every size and colour in the app comes from here. See the guide at the top of the block. */
+/* ================= Design tokens =================
+   Every size in the app comes from here. New UI picks from these; don't invent new numbers.
+   Type:    2xs 11 • xs 12 • sm 13 • md 14 • base 15 • lg 16 • xl 17 • title 19 • h2 22 • stat 26
+   Radius:  xs 8 (tiny tags) • sm 12 (chips, small buttons, icon squares) • md 16 (buttons, inner blocks) • lg 22 (cards) • xl 24 (sheets)
+   Heights: chip 32 • small button 34 • field 42 • button 50 • tile 88 • feature button 80
+   Icons:   round icon button 42 (page) / 36 (in cards and panels) • icon square 44 (feature) / 40 (rows)
+            glyphs 14 • 16 • 18 • 20 • 22
+   Spacing: 4 • 8 • 12 • 16 • 20 • 24 • 28; tiles in a grid sit --gap apart; cards pad --pad-y --pad-x
+   Panels:  the first element sits --panel-top below the header line; it never adds its own top margin */
+:root {
+  --t-2xs: 11px; --t-xs: 12px; --t-sm: 13px; --t-md: 14px; --t-base: 15px; --t-lg: 16px; --t-xl: 17px; --t-title: 19px; --t-h2: 22px; --t-stat: 26px;
+  --r-xs: 8px; --r-sm: 12px; --r-md: 16px; --r-lg: 22px; --r-xl: 24px; --r-full: 999px;
+  --h-chip: 32px; --h-btn-sm: 34px; --h-field: 42px; --h-btn: 50px; --h-tile: 88px; --h-feat: 80px;
+  --ib: 42px; --ib-sm: 36px; --ic: 44px; --ic-sm: 40px;
+  --g-xs: 14px; --g-sm: 16px; --g-md: 18px; --g-lg: 20px; --g-xl: 22px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-7: 28px;
+  --gap: 10px; --pad-y: 16px; --pad-x: 18px;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;  /* commands to copy */
+  --hair: 1px; --sw-w: 48px; --sw-h: 28px; --sw-knob: 22px;  /* hairlines and the on/off switch */
+  --panel-top: 18px;  /* header line to the first thing in every panel (News is the reference) */
+}
+/* Colours (redesign 2026-10-24): one warm-neutral family for both modes, so light and dark read as the same app at two brightness levels.
+   Light: off-white page, white cards that lift with a soft shadow. Dark: warm near-black page, charcoal cards, no shadow.
+   --pop is a surface above a card (selected segment, stepper buttons). --shadow is the card lift. */
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0; --card: #ffffff; --raised: #eeede9; --pop: #ffffff; --line: rgba(32,28,20,.08); --line-2: rgba(32,28,20,.16);
+  --text: #1a1917; --muted: #67645e; --faint: #9e9a93; --inv: #1a1917; --on-inv: #fbfaf8; --sel: #1a1917; --on-sel: #fbfaf8; --on-acc: #ffffff;
+  --good: #1e9e57; --auto: #2f6fd0; --bad: #d63a2c; --warn: #c97b0c; --bar: rgba(244,243,240,.84);
+  --src-you: #2f6fd0; --src-ai: #7a52d6; --src-ppl: #138a7a; --week: #b8329a; --deep: #4f8774; --letter: #c2562f;  /* where a find-and-replace match is */
+  --shadow: 0 1px 2px rgba(32,28,20,.04), 0 3px 12px rgba(32,28,20,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f0e0d; --card: #1c1b19; --raised: #282724; --pop: #35332f; --line: rgba(255,248,235,.08); --line-2: rgba(255,248,235,.17);
+    --text: #f3f1ec; --muted: rgba(243,241,236,.62); --faint: rgba(243,241,236,.36); --inv: #35332f; --on-inv: #f3f1ec; --sel: #dedad2; --on-sel: #0f0e0d; --on-acc: #0f0e0d;
+    --good: #3dd273; --auto: #7fb0ff; --bad: #ff5b4c; --warn: #f4a63c; --bar: rgba(15,14,13,.82);
+    --src-you: #7fb0ff; --src-ai: #b49cff; --src-ppl: #5fd3c0; --week: #e85ac8; --deep: #9cc4b2; --letter: #ff8f6b;
+    --shadow: 0 0 0 1px rgba(255,248,235,.035);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0e0d; --card: #1c1b19; --raised: #282724; --pop: #35332f; --line: rgba(255,248,235,.08); --line-2: rgba(255,248,235,.17);
+  --text: #f3f1ec; --muted: rgba(243,241,236,.62); --faint: rgba(243,241,236,.36); --inv: #35332f; --on-inv: #f3f1ec; --sel: #dedad2; --on-sel: #0f0e0d; --on-acc: #0f0e0d;
+  --good: #3dd273; --auto: #7fb0ff; --bad: #ff5b4c; --warn: #f4a63c; --bar: rgba(15,14,13,.82);
+  --src-you: #7fb0ff; --src-ai: #b49cff; --src-ppl: #5fd3c0; --week: #e85ac8; --deep: #9cc4b2; --letter: #ff8f6b;
+  --shadow: 0 0 0 1px rgba(255,248,235,.035);
+}

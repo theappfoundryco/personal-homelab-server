@@ -1,0 +1,6 @@
+[Unit]
+Description=Nightly homelab backup (local + Google Drive)
+[Service]
+EnvironmentFile=-/etc/homelab/host.env
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-backup

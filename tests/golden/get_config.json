@@ -1,0 +1,28 @@
+{
+ "body": {
+  "clocks": [
+   {
+    "label": "Paris",
+    "tz": "Europe/Paris"
+   },
+   {
+    "label": "Tokyo",
+    "tz": "Asia/Tokyo"
+   }
+  ],
+  "features": {
+   "therapy_recap": false
+  },
+  "home_city": "Testville",
+  "home_lat": 10.0,
+  "home_lon": 20.0,
+  "name": "Alex",
+  "support": {
+   "helpline_name": "",
+   "helpline_tel": "",
+   "therapist": ""
+  },
+  "timezone": "UTC"
+ },
+ "status": 200
+}

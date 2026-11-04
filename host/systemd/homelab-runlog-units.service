@@ -1,0 +1,5 @@
+[Unit]
+Description=Add host timer runs to the homelab run log
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-runlog-units

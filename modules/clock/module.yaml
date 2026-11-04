@@ -1,0 +1,12 @@
+name: clock
+title: "World clock"
+description: "Shows the time in the cities you choose, compared with home."
+version: 0.1.0
+default: true
+requires: []
+optional: []
+platforms: [linux, mac, wsl]
+settings:
+  world_clock: { type: list, default: [] }
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  home_cards: [world-clock]

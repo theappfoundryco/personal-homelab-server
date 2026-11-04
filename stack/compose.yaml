@@ -1,0 +1,286 @@
+name: homelab
+
+# Every image is pinned to an exact version (checked by scripts/check-pins.py; Renovate proposes updates as pull requests).
+# Pinned on November 3, 2026. Read a project's release notes before accepting a major version, especially for n8n, Grafana and Open WebUI,
+# which migrate their data on first start and cannot always go back. Take a backup first: homelab backup.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: node-exporter
+    restart: unless-stopped
+    pid: host
+    network_mode: host
+    security_opt:
+      - apparmor:unconfined
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=:9100
+      - --collector.systemd
+      - --collector.systemd.enable-start-time-metrics
+      - --collector.systemd.unit-include=(docker|tailscaled).service
+    volumes:
+      - /:/host:ro,rslave
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+      - --store_container_labels=false
+      - --disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl,process,advtcp,memory_numa,oom_event
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    container_name: grafana
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      GF_USERS_DEFAULT_THEME: dark
+      GF_FEATURE_TOGGLES_ENABLE: grafanaconfig
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ALLOW_EMBEDDING: "true"  # opens inside the landing page app
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/homelab.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.5.9
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - uptime-kuma-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN: "true"  # opens inside the landing page app
+
+  landing:
+    image: nginx:1.31.8-alpine
+    container_name: landing
+    restart: unless-stopped
+    volumes:
+      - ./landing/site:/usr/share/nginx/html:ro
+      - ./landing/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../modules:/usr/share/modules:ro
+      - ${HL_STATS_DIR:-/var/lib/homelab-stats}:/srv/stats:ro
+    ports:
+      - "${HL_BIND:-127.0.0.1}:${HL_PORT:-3095}:80"
+
+  telegram-bot:
+    build:
+      context: ..  # repo root, so core/ and modules/ are part of the image
+      dockerfile: stack/telegram/Dockerfile
+    image: homelab-telegram-bot:local
+    container_name: telegram-bot
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      TZ: ${HL_TIMEZONE:-UTC}
+      PYTHONUNBUFFERED: "1"
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    volumes:
+      - ./telegram/intents.py:/app/intents.py:ro
+      - ../core:/app/core:ro
+      - ../modules:/app/modules:ro
+      - ./config.yaml:/config/config.yaml:ro
+      - ${HL_STATS_DIR:-/var/lib/homelab-stats}:/srv/stats:ro
+      - ${HL_DATA_DIR:-/var/lib/homelab-bot}:/data
+      - ${HL_SECRETS_DIR:-./secrets}:/secrets:ro
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      BIND_CONFIG: ":2375"  # IPv4 only: the default also opens IPv6 and stops on machines where IPv6 is off
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:v1.10.0
+    container_name: whisper
+    restart: unless-stopped
+    environment:
+      ASR_ENGINE: faster_whisper
+      ASR_MODEL: small
+      MODEL_IDLE_TIMEOUT: "600"
+    volumes:
+      - whisper-cache:/root/.cache
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:v2.7.0
+    container_name: homepage
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: ${HL_ALLOWED_HOSTS:-localhost:3080,127.0.0.1:3080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:3080:3000"
+
+  adguard:
+    image: adguard/adguardhome:v0.107.79
+    container_name: adguard
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - adguard-work:/opt/adguardhome/work
+      - ./adguard:/opt/adguardhome/conf
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:3.1.0
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      GENERIC_TIMEZONE: ${HL_TIMEZONE:-UTC}
+      TZ: ${HL_TIMEZONE:-UTC}
+      N8N_HOST: ${HL_HOSTNAME:-localhost}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://${HL_HOSTNAME:-localhost}:5678/
+      N8N_SECURE_COOKIE: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ${HL_STATS_DIR:-/var/lib/homelab-stats}:/home/node/.n8n-files/homelab-stats:ro
+      - ${HL_DATA_DIR:-/var/lib/homelab-bot}:/home/node/.n8n-files/homelab-bot:ro
+    ports:
+      - "127.0.0.1:5678:5678"
+
+  dozzle:
+    image: amir20/dozzle:v11.4.0
+    container_name: dozzle
+    restart: unless-stopped
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:8888:8080"
+
+  watchtower:  # off unless you ask for it: COMPOSE_PROFILES=auto-update in .env. It would fight `homelab update` and move the pinned versions on its own.
+    image: nickfedor/watchtower:1.23.2
+    container_name: watchtower
+    restart: unless-stopped
+    profiles: [auto-update]
+    environment:
+      TZ: ${HL_TIMEZONE:-UTC}
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_NOTIFICATION_URL: generic+http://telegram-bot:8080/watchtower
+      WATCHTOWER_NOTIFICATION_REPORT: "true"
+      WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+      # one line per app; the Telegram bot turns it into a tidy "apps updated" message
+      WATCHTOWER_NOTIFICATION_TEMPLATE: |-
+        {{- if .Report -}}{{- range .Report.Updated }}updated|{{ .Name }}|{{ .ImageName }}
+        {{ end -}}{{- range .Report.Failed }}failed|{{ .Name }}|{{ .ImageName }}|{{ .Error }}
+        {{ end -}}{{- end -}}
+      WATCHTOWER_NOTIFICATIONS_LEVEL: info
+      WATCHTOWER_HTTP_API_METRICS: "true"
+      WATCHTOWER_HTTP_API_PERIODIC_POLLS: "true"
+      WATCHTOWER_HTTP_API_TOKEN: ${HOMEPAGE_VAR_WATCHTOWER_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  ollama:
+    image: ollama/ollama:0.40.14
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "4"  # the two kept loaded (4B, embedder) plus two loaded by hand from the Server page or Open WebUI
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KV_CACHE_TYPE: q8_0
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.12.5
+    container_name: open-webui
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: ${HL_OLLAMA_URL:-http://ollama:11434}  # install.sh points it at the Mac's own Ollama when that is used
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      WEBUI_NAME: Homelab AI
+      ANONYMIZED_TELEMETRY: "false"
+      DO_NOT_TRACK: "true"
+      SCARF_NO_ANALYTICS: "true"
+      ENABLE_OPENAI_API: "false"
+      DEFAULT_MODELS: ${HL_CHAT_MODEL:-qwen3.5:4b}
+      ENABLE_WEB_SEARCH: "true"
+      ENABLE_RAG_WEB_SEARCH: "true"
+      WEB_SEARCH_ENGINE: searxng
+      RAG_WEB_SEARCH_ENGINE: searxng
+      SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
+    volumes:
+      - open-webui-data:/app/backend/data
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  searxng:
+    image: searxng/searxng:2026.11.2-d138f443b
+    container_name: searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng
+    ports:
+      - "127.0.0.1:8889:8080"
+
+volumes:
+  whisper-cache:
+  prometheus-data:
+  grafana-data:
+  uptime-kuma-data:
+  adguard-work:
+  n8n-data:
+  ollama-data:
+  open-webui-data:
+

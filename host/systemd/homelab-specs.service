@@ -1,0 +1,6 @@
+[Unit]
+Description=Hardware specs for the home page
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-specs

@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Hardware and software specs for the home page Server tab -> /var/lib/homelab-stats/specs.json (every 5 min)."""
+import json, os, re, subprocess, time
+
+OUT = "/var/lib/homelab-stats/specs.json"
+STATE = "/var/lib/homelab-stats/.power-state.json"
+RAPL = "/sys/class/powercap/intel-rapl:0"
+
+
+def sh(cmd):
+    try:
+        return subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20).stdout.strip()
+    except Exception:
+        return ""
+
+
+def rd(p):
+    try:
+        return open(p).read().strip()
+    except Exception:
+        return ""
+
+
+LSCPU = sh("LC_ALL=C lscpu")
+
+
+def lscpu(key):
+    m = re.search(rf"^{re.escape(key)}:\s*(.+)$", LSCPU, re.M)
+    return m.group(1).strip() if m else ""
+
+
+# ---- CPU
+name = lscpu("Model name")
+base = re.search(r"@\s*([\d.]+)GHz", name)
+cpu = {
+    "model": " ".join(re.sub(r"\(R\)|\(TM\)|CPU|@.*", "", name).split()),
+    "cores": int(lscpu("Core(s) per socket") or 0) * int(lscpu("Socket(s)") or 1),
+    "threads": int(lscpu("CPU(s)") or 0),
+    "base_ghz": float(base.group(1)) if base else None,
+    "max_ghz": round(float(lscpu("CPU max MHz") or 0) / 1000, 1),
+    "min_ghz": round(float(lscpu("CPU min MHz") or 0) / 1000, 1),
+    "l2": lscpu("L2 cache").split(" (")[0], "l3": lscpu("L3 cache").split(" (")[0],
+    "virt": lscpu("Virtualization"),
+    "cap_w": round(int(rd(f"{RAPL}/constraint_0_power_limit_uw") or 0) / 1e6),
+    "burst_w": round(int(rd(f"{RAPL}/constraint_1_power_limit_uw") or 0) / 1e6),
+    "governor": rd("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+}
+
+# Average CPU power since the last run, from the energy counter
+e, now = int(rd(f"{RAPL}/energy_uj") or 0), time.time()
+try:
+    last = json.load(open(STATE))
+    de = (e - last["e"]) % int(rd(f"{RAPL}/max_energy_range_uj") or 2 ** 63)
+    if 30 < now - last["t"] < 3600:
+        cpu["power_w"] = round(de / 1e6 / (now - last["t"]), 1)
+        cpu["power_mins"] = max(1, round((now - last["t"]) / 60))
+except Exception:
+    pass
+json.dump({"e": e, "t": now}, open(STATE, "w"))
+
+# ---- Memory
+dimms = []
+for block in sh("dmidecode -t memory").split("\n\n"):
+    if "Memory Device" not in block:
+        continue
+    f = dict(re.findall(r"^\s*([^:\n]+):\s*(.*)$", block, re.M))
+    dimms.append({"size": f.get("Size", ""), "type": f.get("Type", ""), "speed": f.get("Configured Memory Speed") or f.get("Speed", ""),
+                  "maker": f.get("Manufacturer", ""), "part": f.get("Part Number", "").strip(), "form": f.get("Form Factor", "")})
+used = [d for d in dimms if d["size"] and "No Module" not in d["size"]]
+gb = lambda s: int(re.sub(r"\D", "", s) or 0) * (1024 if "TB" in s else 1)
+u = used[0] if used else {}
+mem = {"total_gb": sum(gb(d["size"]) for d in used), "slots": len(dimms), "used_slots": len(used),
+       "type": u.get("type", ""), "speed": u.get("speed", ""), "maker": u.get("maker", ""), "part": u.get("part", ""),
+       "form": u.get("form", ""), "channel": "Dual-channel" if len(used) >= 2 else "Single-channel"}
+
+# ---- Storage
+disk = {}
+try:
+    j = json.loads(sh("smartctl -j -a /dev/nvme0n1"))
+    h = j.get("nvme_smart_health_information_log", {})
+    speed, width = rd("/sys/class/nvme/nvme0/device/current_link_speed"), rd("/sys/class/nvme/nvme0/device/current_link_width")
+    gen = {"2.5": "1", "5.0": "2", "8.0": "3", "16.0": "4"}.get(speed.split(" ")[0], "")
+    disk = {"model": j.get("model_name", ""), "size_gb": round(j.get("user_capacity", {}).get("bytes", 0) / 1e9),
+            "link": f"PCIe Gen {gen} x{width}" if gen else "", "health_ok": j.get("smart_status", {}).get("passed"),
+            "worn_pct": h.get("percentage_used"), "hours": h.get("power_on_hours"),
+            "written_tb": round(h.get("data_units_written", 0) * 512000 / 1e12, 1), "temp": h.get("temperature"),
+            "firmware": j.get("firmware_version", ""), "cycles": h.get("power_cycles"), "unsafe": h.get("unsafe_shutdowns"),
+            "media_errors": h.get("media_errors", 0), "spare_pct": h.get("available_spare")}
+except Exception:
+    pass
+
+# ---- Network
+wifi = {}
+line = next((l for l in sh("nmcli -t -f ACTIVE,SSID,FREQ,RATE,SIGNAL dev wifi").splitlines() if l.startswith("yes:")), "")
+if line:
+    _, ssid, freq, rate, sig = (line.split(":") + [""] * 5)[:5]
+    mhz = int(re.sub(r"\D", "", freq) or 0)
+    wifi = {"ssid": ssid, "band": "5 GHz" if mhz >= 4900 else "2.4 GHz" if mhz else "",
+            "rate": rate.replace("Mbit/s", "Mbps").strip(), "signal": int(sig or 0)}
+LSPCI = sh("lspci")
+
+
+def pci(kind):
+    m = re.search(kind + r"[^:]*: (.+)", LSPCI)
+    return re.sub(r"Intel Corporation |\s*\(rev \w+\)|Wireless |Ethernet Connection \(\d+\) ", "", m.group(1)).strip() if m else ""
+
+
+eth_up = rd("/sys/class/net/eno1/operstate") == "up"
+lan = re.search(r"inet ([\d.]+)", sh("ip -4 addr show wlp2s0") or "") or re.search(r"inet ([\d.]+)", sh("ip -4 addr show eno1") or "")
+net = {"wifi_card": pci("Network controller"), "eth_card": pci("Ethernet controller"), "wifi": wifi,
+       "eth_up": eth_up, "eth_speed": int(rd("/sys/class/net/eno1/speed") or 0) if eth_up else 0,
+       "lan_ip": lan.group(1) if lan else "", "tailnet_ip": sh("tailscale ip -4").split("\n")[0]}
+
+gpu = pci("VGA compatible controller")
+gpu = (re.search(r"\[(.+)\]", gpu) or [None, gpu])[1]
+osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', rd("/etc/os-release"), re.M))
+docker = re.search(r"version ([\d.]+)", sh("docker --version"))
+def external():
+    """The SATA backup drive: live status, plus size and backups from its last mount."""
+    info = {}
+    try:
+        info = json.load(open("/var/lib/homelab-stats/usb-drive.json"))
+    except Exception:
+        pass
+    status = "in_use" if os.path.ismount("/mnt/backup") else "idle" if os.path.exists("/dev/disk/by-label/homelab-backup") else "disconnected"
+    return {"status": status, "label": "homelab-backup", **info}
+
+
+out = {
+    "generated": int(now),
+    "external": external(),
+    "device": {"name": rd("/sys/class/dmi/id/product_name").replace("Desktop Mini", "Mini"), "maker": rd("/sys/class/dmi/id/sys_vendor"),
+               "bios": rd("/sys/class/dmi/id/bios_version"), "bios_date": rd("/sys/class/dmi/id/bios_date")},
+    "cpu": cpu, "gpu": gpu, "memory": mem, "storage": disk, "network": net,
+    "software": {"os": osr.get("PRETTY_NAME", ""), "kernel": os.uname().release, "docker": docker.group(1) if docker else "",
+                 "containers": len(sh("docker ps -q").split())},
+}
+tmp = OUT + ".tmp"
+with open(tmp, "w") as fh:
+    json.dump(out, fh, indent=1)
+os.chmod(tmp, 0o644)
+os.replace(tmp, OUT)

@@ -1,0 +1,8 @@
+[Unit]
+Description=Homelab self-healing check
+After=homelab-boot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-watchdog check
+TimeoutStartSec=4min

@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""Wi-Fi fallback for the homelab.
+
+If the server can't get on any Wi-Fi it knows for 3 minutes (new house, router changed, password changed),
+it switches on its own Wi-Fi called "Homelab-Setup". Join it from your phone, open http://10.42.0.1,
+pick your Wi-Fi and type the password. The server joins it and the setup Wi-Fi disappears.
+
+Every 5 minutes (unless someone is using the setup page) it drops the setup Wi-Fi for ~30 s and retries the
+networks it knows, so it also recovers by itself when the usual router comes back.
+
+The same page is on port 8099 of this server (use its tailnet or LAN name) to add networks ahead of time,
+e.g. your phone's hotspot, so the server can fall back to it.
+"""
+import html, json, os, secrets, socket, subprocess, threading, time, urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+IFACE = "wlp2s0"
+WIRED = "eno1"
+AP = "Homelab-Setup"
+AP_IP = "10.42.0.1"
+RUN = "/run/homelab-wifi"
+PASS_FILE = "/etc/homelab/wifi-setup.pass"
+GRACE = int(os.environ.get("WIFI_GRACE", 180))    # offline this long before the setup Wi-Fi comes on
+AP_MIN = int(os.environ.get("WIFI_AP_MIN", 300))  # setup Wi-Fi stays on at least this long before retrying known networks
+IDLE = int(os.environ.get("WIFI_IDLE", 240))      # ...and longer while the page was used in the last 4 minutes
+SKIP_KNOWN_ONCE = os.environ.get("WIFI_TEST") == "1"  # test: go straight to the setup Wi-Fi the first time
+
+lock = threading.Lock()
+st = {"last_visit": 0, "message": "", "ok": None, "busy": False, "known_visible": False}
+
+
+def log(msg):
+    subprocess.run(["logger", "-t", "homelab-wifi", msg])
+
+
+def nm(*args, timeout=60):
+    try:
+        r = subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout.strip(), r.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 1, "", "timeout"
+
+
+def split(line):
+    """nmcli -t fields are ':'-separated with '\\:' for a literal colon."""
+    out, cur, esc = [], "", False
+    for ch in line:
+        if esc:
+            cur, esc = cur + ch, False
+        elif ch == "\\":
+            esc = True
+        elif ch == ":":
+            out.append(cur); cur = ""
+        else:
+            cur += ch
+    return out + [cur]
+
+
+def rows(*args):
+    return [split(l) for l in nm("-t", *args)[1].splitlines() if l]
+
+
+def devices():
+    return {r[0]: (r[1], r[2]) for r in rows("-f", "DEVICE,STATE,CONNECTION", "dev") if len(r) == 3}
+
+
+def online():
+    d = devices()
+    return any(d.get(i, ("", ""))[0] == "connected" and d[i][1] != AP for i in (IFACE, WIRED))
+
+
+def current_ssid():
+    s, c = devices().get(IFACE, ("", ""))
+    return c if s == "connected" and c != AP else ""
+
+
+def ap_on():
+    return devices().get(IFACE, ("", ""))[1] == AP
+
+
+def saved():
+    """SSID -> NetworkManager connection name, for every Wi-Fi the server knows."""
+    out = {}
+    for name, typ in (r[:2] for r in rows("-f", "NAME,TYPE", "con", "show")):
+        if typ == "802-11-wireless" and name != AP:
+            ssid = nm("-g", "802-11-wireless.ssid", "con", "show", name)[1].replace("\\:", ":")
+            out[ssid or name] = name
+    return out
+
+
+def scan():
+    nm("dev", "wifi", "rescan", "ifname", IFACE, timeout=20)
+    time.sleep(4)
+    seen = {}
+    for r in rows("-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "ifname", IFACE):
+        if len(r) < 3 or not r[0] or r[0] == AP:
+            continue
+        sig = int(r[1] or 0)
+        if sig > seen.get(r[0], {}).get("signal", -1):
+            seen[r[0]] = {"ssid": r[0], "signal": sig, "open": r[2] in ("", "--")}
+    nets = sorted(seen.values(), key=lambda n: -n["signal"])
+    if nets:
+        json.dump(nets, open(f"{RUN}/scan.json", "w"))
+    return nets
+
+
+def cached_scan():
+    try:
+        return json.load(open(f"{RUN}/scan.json"))
+    except Exception:
+        return []
+
+
+def set_mode(mode):
+    """Tells the watchdog what's going on so it doesn't reboot or reset Wi-Fi under us."""
+    if mode:
+        json.dump(dict(mode=mode, last_visit=st["last_visit"], known_visible=st["known_visible"]), open(f"{RUN}/mode.json", "w"))
+    elif os.path.exists(f"{RUN}/mode.json"):
+        os.remove(f"{RUN}/mode.json")
+
+
+def ensure_ap_profile():
+    if any(r[0] == AP for r in rows("-f", "NAME", "con", "show")):
+        return
+    pw = open(PASS_FILE).read().strip()
+    nm("con", "add", "type", "wifi", "ifname", IFACE, "con-name", AP, "ssid", AP,
+       "connection.autoconnect", "no", "802-11-wireless.mode", "ap", "802-11-wireless.band", "bg",
+       "802-11-wireless.channel", "6", "ipv4.method", "shared", "ipv4.addresses", f"{AP_IP}/24", "ipv6.method", "disabled",
+       "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
+       "wifi-sec.psk", pw)
+
+
+def ap_up():
+    ensure_ap_profile()
+    ok = nm("con", "up", AP, timeout=45)[0] == 0
+    log("setup Wi-Fi on" if ok else "setup Wi-Fi failed to start")
+    return ok
+
+
+def ap_down():
+    nm("con", "down", AP, timeout=30)
+    time.sleep(2)
+
+
+def try_known(nets):
+    global SKIP_KNOWN_ONCE
+    if SKIP_KNOWN_ONCE:
+        SKIP_KNOWN_ONCE = False
+        return False
+    known = saved()
+    prio = lambda n: int(nm("-g", "connection.autoconnect-priority", "con", "show", known[n["ssid"]])[1] or 0)
+    for n in sorted((n for n in nets if n["ssid"] in known), key=lambda n: (-prio(n), -n["signal"])):  # usual Wi-Fi first
+        if True:
+            log(f"trying known Wi-Fi {n['ssid']}")
+            if nm("con", "up", known[n["ssid"]], "ifname", IFACE, timeout=60)[0] == 0:
+                log(f"joined {n['ssid']}")
+                return True
+    return False
+
+
+def join(ssid, pw, hidden):
+    """Save a network; if the server is offline, also join it right away."""
+    try:
+        known = saved()
+        if online():
+            # Just remember it for later (e.g. the phone hotspot).
+            sec = ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", pw] if pw else []
+            if ssid in known:
+                code = nm("con", "modify", known[ssid], *sec)[0] if pw else 0
+            else:
+                code = nm("con", "add", "type", "wifi", "ifname", IFACE, "con-name", ssid, "ssid", ssid,
+                          "connection.autoconnect", "yes", "connection.autoconnect-priority", "1", *sec)[0]
+            st.update(ok=code == 0, message=f"Saved “{ssid}”. The server will use it if your usual Wi-Fi isn't around."
+                      if code == 0 else f"Couldn't save “{ssid}”.")
+            log(f"saved Wi-Fi {ssid}" if code == 0 else f"failed to save Wi-Fi {ssid}")
+            return
+        was_ap = ap_on()
+        if was_ap:
+            ap_down()
+        scan()
+        if ssid in known:
+            if pw:
+                nm("con", "modify", known[ssid], "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", pw)
+            ok = nm("con", "up", known[ssid], "ifname", IFACE, timeout=60)[0] == 0
+        else:
+            args = ["dev", "wifi", "connect", ssid, "ifname", IFACE] + (["password", pw] if pw else []) + (["hidden", "yes"] if hidden else [])
+            ok = nm(*args, timeout=60)[0] == 0
+            if ok:
+                nm("con", "modify", saved().get(ssid, ssid), "connection.autoconnect-priority", "10")
+            else:
+                for name in set(saved().values()) - set(known.values()):  # drop the half-made profile
+                    nm("con", "delete", name)
+        if ok:
+            log(f"joined new Wi-Fi {ssid}")
+            st.update(ok=True, message=f"Connected to “{ssid}”.")
+            set_mode(None)
+        else:
+            log(f"could not join {ssid}")
+            st.update(ok=False, message=f"Couldn't join “{ssid}”. Check the password and try again.")
+            if was_ap:
+                ap_up()
+    finally:
+        st["busy"] = False
+
+
+def loop():
+    offline_since, ap_since = None, 0
+    while True:
+        try:
+            with lock:
+                if st["busy"]:
+                    pass
+                elif online():
+                    if ap_on():  # e.g. a cable was plugged in
+                        ap_down()
+                    if offline_since:
+                        log("online again")
+                    offline_since = None
+                    set_mode(None)
+                elif ap_on():
+                    set_mode("setup")
+                    if time.time() - ap_since > AP_MIN and time.time() - st["last_visit"] > IDLE:
+                        ap_down()  # quick retry of the networks it knows
+                        nets = scan()
+                        st["known_visible"] = any(n["ssid"] in saved() for n in nets)
+                        if not try_known(nets):
+                            ap_since = time.time() if ap_up() else 0
+                else:
+                    offline_since = offline_since or time.time()
+                    if time.time() - offline_since > GRACE:
+                        nets = scan()
+                        st["known_visible"] = any(n["ssid"] in saved() for n in nets)
+                        if not try_known(nets):
+                            set_mode("setup")
+                            ap_since = time.time() if ap_up() else 0
+        except Exception as e:
+            log(f"error: {e}")
+        time.sleep(15)
+
+
+PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Homelab Wi-Fi</title>
+<style>
+:root{--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--muted:#6e6e73;--line:#e5e5ea;--accent:#0a84ff;--good:#1f9d55;--bad:#d93025}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f5f5f7;--muted:#98989d;--line:#2c2c2e;--good:#30d158;--bad:#ff453a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:17px/1.4 -apple-system,system-ui,sans-serif;padding:24px 16px 48px}
+main{max-width:460px;margin:0 auto}h1{font-size:28px;margin:0 0 4px}p.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+.now{display:flex;gap:12px;align-items:center}.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.msg{padding:12px 14px;border-radius:12px;margin-bottom:14px;font-weight:500}
+.msg.ok{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good)}
+.msg.bad{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.net{display:flex;justify-content:space-between;align-items:center;width:100%;padding:14px 4px;border:0;border-bottom:1px solid var(--line);
+background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}.net:last-child{border-bottom:0}
+.net small{color:var(--muted)}.bars{letter-spacing:-2px;color:var(--accent)}
+label{display:block;font-weight:600;margin:12px 0 6px}input{width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);
+background:var(--bg);color:inherit}button.go{width:100%;margin-top:16px;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#fff;
+font:600 17px system-ui;cursor:pointer}.muted{color:var(--muted);font-size:14px}.show{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:15px}
+.show input{width:auto}
+</style></head><body><main>
+<h1>Homelab Wi-Fi</h1><p class="sub">Choose the Wi-Fi the server should use.</p>
+__MSG__
+<div class="card now"><span class="dot" style="background:__DOTC__"></span><div><b>__NOW__</b><div class="muted">__NOWSUB__</div></div></div>
+<form method="post" action="/join" class="card" id="f">
+<b>Networks nearby</b>
+<div id="list">__NETS__</div>
+<label for="ssid">Wi-Fi name</label><input id="ssid" name="ssid" required autocomplete="off" autocapitalize="none" placeholder="Tap one above or type it">
+<label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="off" placeholder="Leave empty if it has none">
+<label class="show"><input type="checkbox" onclick="pw.type=this.checked?'text':'password'"> Show password</label>
+<button class="go" type="submit">__BTN__</button>
+<p class="muted">__HINT__</p>
+</form>
+<p class="muted">Saved networks: __SAVED__</p>
+</main><script>
+document.querySelectorAll('.net').forEach(b=>b.onclick=()=>{ssid.value=b.dataset.ssid;pw.focus()});
+</script></body></html>"""
+
+
+def bars(sig):
+    n = 4 if sig > 75 else 3 if sig > 55 else 2 if sig > 35 else 1
+    return "●" * n + "<span style='opacity:.25'>" + "●" * (4 - n) + "</span>"
+
+
+def render():
+    e = html.escape
+    on, ssid = online(), current_ssid()
+    nets = cached_scan()
+    if on and not st["busy"]:  # can't scan while the setup Wi-Fi is on, so that view uses the list from just before
+        f = f"{RUN}/scan.json"
+        if not os.path.exists(f) or time.time() - os.path.getmtime(f) > 60:
+            nets = scan() or nets
+    known = saved()
+    items = "".join(f"<button type='button' class='net' data-ssid='{e(n['ssid'], quote=True)}'><span>{e(n['ssid'])}"
+                    f"{' <small>• saved</small>' if n['ssid'] in known else ''}{' <small>• no password</small>' if n['open'] else ''}"
+                    f"</span><span class='bars'>{bars(n['signal'])}</span></button>" for n in nets[:12]) \
+        or "<p class='muted'>No networks found yet. You can type the name below.</p>"
+    msg = f"<div class='msg {'ok' if st['ok'] else 'bad'}'>{e(st['message'])}</div>" if st["message"] else ""
+    if st["busy"]:
+        now, sub, dot = "Connecting…", "This takes up to a minute.", "#ff9f0a"
+    elif on:
+        now, sub, dot = f"Online{' on ' + ssid if ssid else ' (cable)'}", "Everything is fine.", "var(--good)"
+    else:
+        now, sub, dot = "Not connected to the internet", "Pick your Wi-Fi below.", "var(--bad)"
+    hint = ("The server will remember this network and use it when your usual Wi-Fi isn't around, for example your phone's hotspot."
+            if on else "After you tap Connect, this setup Wi-Fi switches off for a moment. If it comes back within 2 minutes, "
+                       "the password was wrong: join “Homelab-Setup” again and retry.")
+    return (PAGE.replace("__MSG__", msg).replace("__DOTC__", dot).replace("__NOW__", e(now)).replace("__NOWSUB__", e(sub))
+            .replace("__NETS__", items).replace("__BTN__", "Save network" if on else "Connect")
+            .replace("__HINT__", e(hint)).replace("__SAVED__", e(", ".join(sorted(known)) or "none")))
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def reply(self, code, body, ctype="text/html; charset=utf-8", extra=()):
+        b = body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(b)))
+        for k, v in extra:
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_GET(self):
+        st["last_visit"] = time.time()
+        if self.path.startswith("/status.json"):
+            return self.reply(200, json.dumps({"online": online(), "ssid": current_ssid(), "setup": ap_on(), "message": st["message"]}),
+                              "application/json")
+        # Any other path shows the page, so phones that probe for a login page land here too.
+        self.reply(200, render())
+
+    def do_POST(self):
+        st["last_visit"] = time.time()
+        n = min(int(self.headers.get("Content-Length") or 0), 4096)
+        f = urllib.parse.parse_qs(self.rfile.read(n).decode(errors="replace"))
+        ssid = (f.get("ssid") or [""])[0].strip()[:32]
+        pw = (f.get("password") or [""])[0][:63]
+        if not ssid or (pw and len(pw) < 8):
+            st.update(ok=False, message="Wi-Fi passwords are at least 8 characters." if ssid else "Type the Wi-Fi name.")
+            return self.reply(303, "", extra=[("Location", "/")])
+        if not st["busy"]:
+            st.update(busy=True, message="", ok=None)
+            hidden = ssid not in {n["ssid"] for n in cached_scan()}
+
+            def run():
+                with lock:
+                    join(ssid, pw, hidden)
+            threading.Thread(target=run, daemon=True).start()
+        self.reply(303, "", extra=[("Location", "/")])
+
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def server_bind(self):
+        # Lets us listen on the setup Wi-Fi address before it exists.
+        self.socket.setsockopt(socket.SOL_IP, 15, 1)  # IP_FREEBIND
+        super().server_bind()
+
+
+def main():
+    os.makedirs(RUN, exist_ok=True)
+    if not os.path.exists(PASS_FILE):
+        os.makedirs(os.path.dirname(PASS_FILE), exist_ok=True)
+        with open(os.open(PASS_FILE, os.O_WRONLY | os.O_CREAT, 0o600), "w") as fh:
+            fh.write(secrets.token_urlsafe(9))
+    ensure_ap_profile()
+    for addr in (("127.0.0.1", 8099), (AP_IP, 80)):
+        threading.Thread(target=Server(addr, Handler).serve_forever, daemon=True).start()
+    log("started")
+    loop()
+
+
+if __name__ == "__main__":
+    main()

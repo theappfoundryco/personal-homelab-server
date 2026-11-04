@@ -1,0 +1,11 @@
+name: gmail
+title: "Important emails"
+description: "Ask \"any important emails\" and get a short list, read from Gmail with an app password. Off until you add one."
+version: 0.1.0
+default: true
+requires: []
+optional: [gmail]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: [gmail]

@@ -1,0 +1,13 @@
+title = "personal-homelab-server"
+[extend]
+useDefault = true
+
+# Project-specific rules
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram bot token"
+regex = '''\b\d{8,10}:[A-Za-z0-9_-]{35}\b'''
+keywords = [":"]
+
+[allowlist]
+paths = ['''\.private/''', '''^demo/''', '''\.env\.example$''']

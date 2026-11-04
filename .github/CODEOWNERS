@@ -1,0 +1,12 @@
+# Every change needs a review from a code owner (enforced by the main ruleset).
+* @imsg8
+
+# Code that can touch the host machine, the install and the safety checks. Add a second owner here when there is one.
+/install.sh @imsg8
+/get.sh @imsg8
+/host/ @imsg8
+/core/agent.py @imsg8
+/scripts/check-* @imsg8
+/.github/ @imsg8
+/.githooks/ @imsg8
+/.gitleaks.toml @imsg8

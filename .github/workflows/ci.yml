@@ -1,0 +1,87 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  leak-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: personal-value denylist (tree)
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository  # forks get no secrets
+        env:
+          DENYLIST: ${{ secrets.DENYLIST }}
+        run: |
+          if [ -z "$DENYLIST" ]; then echo "DENYLIST secret missing" >&2; exit 1; fi
+          printf '%s\n' "$DENYLIST" > "$RUNNER_TEMP/denylist.txt"
+          DENYLIST_FILE="$RUNNER_TEMP/denylist.txt" scripts/check-denylist.sh --all
+      - name: personal-value denylist (history)
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository  # forks get no secrets
+        env:
+          DENYLIST: ${{ secrets.DENYLIST }}
+        run: |
+          printf '%s\n' "$DENYLIST" | grep -vE '^[[:space:]]*(#|$)' | paste -sd'|' - > "$RUNNER_TEMP/pat"
+          if git log --all -p --format='%s%n%b' -- . ':!.github/CODEOWNERS' | grep -qiE "$(cat "$RUNNER_TEMP/pat")"; then
+            echo "denylist hit in git history" >&2; exit 1
+          fi
+      - name: data guard
+        run: scripts/check-data-guard.sh --all
+      - name: personal values (emails, public IPs)
+        run: python3 scripts/check-personal.py --all
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check --select E9,F63,F7,F82 .   # syntax errors and undefined names only, until the split lands
+      - name: shellcheck
+        run: |
+          sudo apt-get install -y shellcheck >/dev/null
+          shellcheck -S warning scripts/*.sh .githooks/* || true   # tighten to blocking once host scripts are reviewed
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate compose files
+        run: |
+          for f in $(git ls-files | grep -E '(^|/)compose[^/]*\.ya?ml$'); do
+            [ -f "$(dirname "$f")/.env" ] || touch "$(dirname "$f")/.env"
+            docker compose -f "$f" config -q || { echo "invalid: $f" >&2; exit 1; }
+          done
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - name: every image is pinned to an exact version
+        run: python3 scripts/check-pins.py
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - name: golden API tests and bot router tests
+        working-directory: tests
+        env:
+          PYTHONPATH: .
+        run: python3 -W ignore -m unittest discover -s . -v >/dev/null

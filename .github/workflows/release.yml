@@ -1,0 +1,38 @@
+name: Release
+
+# Keeps a "release pull request" open on main with the next version and changelog (from commit messages that start with feat:, fix: and so on).
+# Merging it tags the version, writes the GitHub Release, and builds and signs the images for that version.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Events made with the default token do not start other workflows, so the image build is called from here.
+  images:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/images.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

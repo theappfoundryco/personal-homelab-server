@@ -1,0 +1,13 @@
+name: journal
+title: "Write your day"
+description: "Write your day. Get a private nightly summary, a weekly recap and deep insights, all on your own machine."
+version: 0.1.0
+default: true
+requires: []
+optional: [ollama]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  tab: { id: journal, title: Journal, icon: book }
+  web: [view.js]
+  home_cards: [journal_today]

@@ -1,0 +1,19 @@
+- greeting:
+    text_size: xl
+    text: Homelab
+- datetime:
+    text_size: md
+    format:
+      weekday: long
+      day: numeric
+      month: long
+      hour: 2-digit
+      minute: 2-digit
+      hour12: false
+- openmeteo:
+    label: Singapore
+    latitude: 1.29
+    longitude: 103.85
+    timezone: Asia/Singapore
+    units: metric
+    cache: 5

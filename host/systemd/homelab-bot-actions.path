@@ -1,0 +1,6 @@
+[Unit]
+Description=Watch for actions requested by the Telegram bot
+[Path]
+PathExistsGlob=/var/lib/homelab-bot/requests/*
+[Install]
+WantedBy=multi-user.target

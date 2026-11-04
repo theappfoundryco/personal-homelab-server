@@ -1,0 +1,13 @@
+name: health
+title: "Health reminders"
+description: "Medicine times, weekly courses and appointments you add yourself. Reminders only, never medical advice."
+version: 0.1.0
+default: true
+requires: []
+optional: [journal]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  tab: { id: sg, title: Health, icon: heart }
+  web: [view.js]
+  home_cards: [meds]

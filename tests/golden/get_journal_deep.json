@@ -1,0 +1,16 @@
+{
+ "body": {
+  "ai": null,
+  "busy": false,
+  "chapters": [],
+  "dates": [],
+  "letters": 0,
+  "months": [],
+  "note": null,
+  "reading": false,
+  "recaps": [],
+  "signals": {},
+  "week": null
+ },
+ "status": 200
+}

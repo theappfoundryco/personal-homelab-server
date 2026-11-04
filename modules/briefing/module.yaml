@@ -1,0 +1,11 @@
+name: briefing
+title: "Morning briefing"
+description: "A short morning briefing with news, weather, your calendar and a server recap. Each part drops out cleanly when its module is off."
+version: 0.1.0
+default: true
+requires: []
+optional: [calendar, weather, news, ollama]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: [briefing]

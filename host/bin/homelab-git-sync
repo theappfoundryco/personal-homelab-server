@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Mirror the homelab's config, data, keys and app databases into /srv/homelab-git and push
+# to a PRIVATE git remote you set up (HL_GIT_REPO_DIR is a clone of it). OPTIONAL and off unless the timer is enabled.
+# Encrypt anything sensitive first (git-crypt or similar): this script copies your config and data as they are.
+# Runs hourly (homelab-git-sync.timer); databases are refreshed once a day so the repo doesn't grow every hour.
+# Settings come from /etc/homelab/host.env: HL_GIT_REPO_DIR, HL_GIT_EXTRA_PATHS (space separated, e.g. keys you choose to back up).
+set -Eeuo pipefail
+REPO=${HL_GIT_REPO_DIR:-/srv/homelab-git}
+VOL=/var/lib/docker/volumes
+STATUS=/var/lib/homelab-stats/git-backup.json  # read by the home page (Server & Apps); kept out of the repo
+cd "$REPO"
+
+status() {  # ok, what happened, files changed: when this run was, the last good one, and when the next is
+  local good next
+  good=$(grep -o '"good": [0-9]*' "$STATUS" 2>/dev/null | grep -o '[0-9]*$' || echo 0)
+  [ "$1" = true ] && good=$(date +%s)
+  next=$(( $(date +%s) + 3600 ))  # the timer counts an hour from the last run, manual ones included (plus up to 2 min)
+  printf '{"ok": %s, "result": "%s", "files": %s, "at": %s, "good": %s, "next": %s}\n' "$1" "$2" "${3:-0}" "$(date +%s)" "$good" "$next" > "$STATUS.tmp"
+  chmod 644 "$STATUS.tmp"; mv "$STATUS.tmp" "$STATUS"
+}
+trap 'status false failed' ERR
+
+copy() {  # copy SRC into the repo at the same path; folders are mirrored (deletions follow)
+  local src=$1; shift
+  [ -e "$src" ] || return 0
+  mkdir -p "$REPO$(dirname "$src")"
+  if [ -d "$src" ]; then rsync -a --delete "$@" "$src/" "$REPO$src/"; else rsync -a "$src" "$REPO$src"; fi
+}
+
+copy /opt/homelab --exclude 'searxng/cache'
+copy /var/lib/homelab-bot
+copy /var/lib/homelab-stats --exclude git-backup.json
+copy /etc/homelab
+copy /etc/docker/daemon.json
+for extra in ${HL_GIT_EXTRA_PATHS:-}; do copy "$extra"; done  # opt in to anything else (keys, Wi-Fi profiles, VPN state)
+mkdir -p "$REPO/usr/local/bin" "$REPO/etc/systemd/system"
+rsync -a --delete --include 'homelab-*' --exclude '*' /usr/local/bin/ "$REPO/usr/local/bin/"
+rsync -a --delete --include 'homelab-*' --exclude '*' /etc/systemd/system/ "$REPO/etc/systemd/system/"
+
+# App databases (consistent snapshots via SQLite's backup API), once a day
+stamp="$REPO/databases/.taken"
+if [ "${1:-}" = "--databases" ] || [ ! -e "$stamp" ] || [ -n "$(find "$stamp" -mmin +1380)" ]; then
+  mkdir -p "$REPO/databases"
+  for pair in n8n.sqlite:homelab_n8n-data/_data/database.sqlite kuma.db:homelab_uptime-kuma-data/_data/kuma.db \
+              grafana.db:homelab_grafana-data/_data/grafana.db \
+              open-webui.db:homelab_open-webui-data/_data/webui.db; do
+    src="$VOL/${pair#*:}"
+    [ -e "$src" ] && sqlite3 "file:$src?mode=ro" ".backup '$REPO/databases/${pair%%:*}'" 2>/dev/null || true
+  done
+  date -Is > "$stamp"
+fi
+
+git add -A
+if git diff --cached --quiet; then
+  git push -q origin main  # anything a failed run left unpushed
+  status true "nothing new"; exit 0
+fi
+files=$(git diff --cached --name-only | wc -l)
+git commit -q -m "sync $(date '+%-d %b %Y, %-I:%M %p')"
+git push -q origin main
+status true pushed "$files"
+logger -t homelab-git-sync "pushed $(git rev-parse --short HEAD)"

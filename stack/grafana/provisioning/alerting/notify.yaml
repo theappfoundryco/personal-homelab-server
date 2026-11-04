@@ -1,0 +1,37 @@
+{
+ "apiVersion": 1,
+ "contactPoints": [
+  {
+   "orgId": 1,
+   "name": "telegram-bot",
+   "receivers": [
+    {
+     "uid": "bot-recap",
+     "type": "webhook",
+     "settings": {
+      "url": "http://telegram-bot:8080/alert",
+      "httpMethod": "POST"
+     }
+    }
+   ]
+  }
+ ],
+ "policies": [
+  {
+   "orgId": 1,
+   "receiver": "telegram-bot",
+   "group_by": [
+    "alertname"
+   ],
+   "group_wait": "30s",
+   "group_interval": "5m",
+   "repeat_interval": "4h"
+  }
+ ],
+ "deleteContactPoints": [
+  {
+   "orgId": 1,
+   "uid": "ntfy-phone"
+  }
+ ]
+}

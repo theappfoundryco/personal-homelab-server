@@ -1,0 +1,9 @@
+[Unit]
+Description=Cap CPU long-term power at 35 W
+After=multi-user.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo 35000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw'
+[Install]
+WantedBy=multi-user.target

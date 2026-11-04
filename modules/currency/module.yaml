@@ -1,0 +1,11 @@
+name: currency
+title: "Currency"
+description: "Convert amounts between currencies, and show your home currency abroad."
+version: 0.1.0
+default: true
+requires: []
+optional: [internet]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  home_cards: [travel-rates]

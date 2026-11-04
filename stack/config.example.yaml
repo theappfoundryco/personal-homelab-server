@@ -1,0 +1,38 @@
+# Homelab settings. Copy this file to config.yaml and edit it. Every line is optional:
+# leave a line out (or delete it) and the default shown here is used.
+# Times are written the way you say them: "6:30 AM", "9:00 PM".
+
+owner:
+  name: "Alex"                # how the dashboard and bot greet you
+
+timezone: "UTC"               # your IANA time zone, e.g. "Europe/London" or "America/New_York"
+
+home:                         # where "home" is: weather and world-clock differences start here
+  city: "London"
+  country: "United Kingdom"
+  lat: 51.51
+  lon: -0.13
+  tz: "Europe/London"
+
+dashboard_url: ""             # full address of your dashboard, used in Telegram buttons, e.g. "http://myserver.tailnet-name.ts.net"
+
+world_clock: []               # cities shown under the clock; easiest to add on Home with +, e.g. - { label: "London", tz: "Europe/London" }
+
+schedule:
+  briefing: "7:00 AM"         # the morning briefing
+  evening_plan: "9:00 PM"     # the evening check-in
+  news_at: ["6:30 AM"]        # when the news is gathered (before the briefing)
+
+models:                       # AI models. The defaults suit a mid-range machine; the setup wizard suggests ones for your hardware.
+  chat: "qwen3.5:4b"          # quick everyday model
+  embed: "embeddinggemma"     # understands what you mean
+  journal: "gemma4:26b"       # nightly journal summaries (needs a larger machine)
+  # claude_journal / claude_news: optional cloud models, used only if you add an Anthropic key
+
+features:                     # switch parts on or off
+  therapy_recap: false        # weekly journal recap to bring to a therapy session. READ docs/DISCLAIMER.md before turning this on.
+
+support:                      # shown in the journal's "if it feels like too much" note
+  therapist: ""               # e.g. "Dr. Sam Lee" (optional)
+  helpline_name: ""           # e.g. "988 Suicide & Crisis Lifeline"
+  helpline_tel: ""            # e.g. "988". Leave empty to point to findahelpline.com

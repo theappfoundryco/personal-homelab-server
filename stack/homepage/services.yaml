@@ -1,0 +1,247 @@
+- Server:
+    - Processor:
+        icon: mdi-cpu-64-bit-#60a5fa
+        description: Intel i7-9700, 8 cores
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3000/d/homelab-command?kiosk
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 5000
+          metrics:
+            - label: Usage
+              query: round(100 - avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100, 0.1)
+              format: { type: text, suffix: " %" }
+            - label: Load
+              query: round(node_load1, 0.01)
+              format: { type: text }
+            - label: Package
+              query: max(node_thermal_zone_temp{type="x86_pkg_temp"})
+              format: { type: text, suffix: " °C" }
+            - label: Clock
+              query: round(avg(node_cpu_scaling_frequency_hertz) / 1e9, 0.1)
+              format: { type: text, suffix: " GHz" }
+    - Memory:
+        icon: mdi-memory-#a78bfa
+        description: 32 GB DDR4, dual-channel
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3000/d/homelab-command?kiosk
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 5000
+          metrics:
+            - label: Used
+              query: round((1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100, 0.1)
+              format: { type: text, suffix: " %" }
+            - label: In use
+              query: node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes
+              format: { type: bbytes, options: { maximumFractionDigits: 1 } }
+            - label: Free
+              query: node_memory_MemAvailable_bytes
+              format: { type: bbytes, options: { maximumFractionDigits: 1 } }
+            - label: Swap
+              query: node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes
+              format: { type: bbytes, options: { maximumFractionDigits: 1 } }
+    - Storage:
+        icon: mdi-harddisk-#34d399
+        description: 512 GB NVMe SSD
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3000/d/homelab-command?kiosk
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: Used
+              query: round((1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100, 0.1)
+              format: { type: text, suffix: " %" }
+            - label: Free
+              query: node_filesystem_avail_bytes{mountpoint="/"}
+              format: { type: bytes, options: { maximumFractionDigits: 0 } }
+            - label: I/O
+              query: round(sum(rate(node_disk_read_bytes_total{device="nvme0n1"}[1m]) + rate(node_disk_written_bytes_total{device="nvme0n1"}[1m])))
+              format: { type: byterate, options: { maximumFractionDigits: 0 } }
+            - label: Temp
+              query: round(max(node_hwmon_temp_celsius{chip=~"nvme.*"}), 1)
+              format: { type: text, suffix: " °C" }
+    - Containers:
+        icon: mdi-docker-#38bdf8
+        description: Docker Compose stack
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:8888
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: Running
+              query: count(count by (name) (container_memory_working_set_bytes{name!=""}))
+              format: { type: text }
+            - label: CPU
+              query: round(sum(rate(container_cpu_usage_seconds_total{name!=""}[2m])) * 100 / 8, 0.01)
+              format: { type: text, suffix: " %" }
+            - label: Memory
+              query: sum(container_memory_working_set_bytes{name!=""})
+              format: { type: bbytes, options: { maximumFractionDigits: 1 } }
+            - label: Uptime
+              query: round((time() - node_boot_time_seconds) / 86400, 0.1)
+              format: { type: text, suffix: " d" }
+- Observability:
+    - Grafana:
+        icon: grafana.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3000/d/homelab-command?kiosk
+        description: Command center
+        server: local
+        container: grafana
+        widget:
+          type: grafana
+          url: http://grafana:3000
+          username: admin
+          password: "{{HOMEPAGE_VAR_GRAFANA_PASS}}"
+          fields: ["dashboards", "alertstriggered"]
+    - Prometheus:
+        icon: prometheus.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:9090
+        description: Metrics, 90 day retention
+        server: local
+        container: prometheus
+        widget:
+          type: prometheus
+          url: http://prometheus:9090
+          fields: ["targets_up", "targets_down"]
+    - Uptime Kuma:
+        icon: uptime-kuma.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3001
+        description: Uptime checks
+        server: local
+        container: uptime-kuma
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: CPU
+              query: round(sum(rate(container_cpu_usage_seconds_total{name="uptime-kuma"}[2m])) * 100, 0.01)
+              format: { type: text, suffix: " %" }
+            - label: Memory
+              query: sum(container_memory_working_set_bytes{name="uptime-kuma"})
+              format: { type: bbytes, options: { maximumFractionDigits: 0 } }
+            - label: Uptime
+              query: round((time() - max(container_start_time_seconds{name="uptime-kuma"})) / 3600, 0.1)
+              format: { type: text, suffix: " h" }
+    - Dozzle:
+        icon: dozzle.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:8888
+        description: Live container logs
+        server: local
+        container: dozzle
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: CPU
+              query: round(sum(rate(container_cpu_usage_seconds_total{name="dozzle"}[2m])) * 100, 0.01)
+              format: { type: text, suffix: " %" }
+            - label: Memory
+              query: sum(container_memory_working_set_bytes{name="dozzle"})
+              format: { type: bbytes, options: { maximumFractionDigits: 0 } }
+            - label: Uptime
+              query: round((time() - max(container_start_time_seconds{name="dozzle"})) / 3600, 0.1)
+              format: { type: text, suffix: " h" }
+- Automation:
+    - n8n:
+        icon: n8n.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:5678
+        description: Workflows and agents
+        server: local
+        container: n8n
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: CPU
+              query: round(sum(rate(container_cpu_usage_seconds_total{name="n8n"}[2m])) * 100, 0.01)
+              format: { type: text, suffix: " %" }
+            - label: Memory
+              query: sum(container_memory_working_set_bytes{name="n8n"})
+              format: { type: bbytes, options: { maximumFractionDigits: 0 } }
+            - label: Uptime
+              query: round((time() - max(container_start_time_seconds{name="n8n"})) / 3600, 0.1)
+              format: { type: text, suffix: " h" }
+    - Watchtower:
+        icon: watchtower.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:8888/container/watchtower
+        description: Nightly updates, 04:00
+        server: local
+        container: watchtower
+        widget:
+          type: watchtower
+          url: http://watchtower:8080
+          key: "{{HOMEPAGE_VAR_WATCHTOWER_TOKEN}}"
+- Network & AI:
+    - AdGuard Home:
+        icon: adguard-home.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3002
+        description: DNS filtering
+        server: local
+        container: adguard
+        widget:
+          type: adguard
+          url: http://host.docker.internal:3002
+          username: admin
+          password: "{{HOMEPAGE_VAR_ADGUARD_PASS}}"
+    - Tailscale:
+        icon: tailscale-light.svg
+        href: https://login.tailscale.com/admin/machines
+        description: Your private network
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 5000
+          metrics:
+            - label: In
+              query: round(rate(node_network_receive_bytes_total{device="tailscale0"}[1m]))
+              format: { type: byterate, options: { maximumFractionDigits: 1 } }
+            - label: Out
+              query: round(rate(node_network_transmit_bytes_total{device="tailscale0"}[1m]))
+              format: { type: byterate, options: { maximumFractionDigits: 1 } }
+            - label: 24h
+              query: round(increase(node_network_receive_bytes_total{device="tailscale0"}[24h]) + increase(node_network_transmit_bytes_total{device="tailscale0"}[24h]))
+              format: { type: bytes, options: { maximumFractionDigits: 1 } }
+    - Wi-Fi Uplink:
+        icon: mdi-wifi-#f59e0b
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:3000/d/homelab-command?kiosk
+        description: wlp2s0
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 5000
+          metrics:
+            - label: Down
+              query: round(rate(node_network_receive_bytes_total{device="wlp2s0"}[1m]))
+              format: { type: byterate, options: { maximumFractionDigits: 1 } }
+            - label: Up
+              query: round(rate(node_network_transmit_bytes_total{device="wlp2s0"}[1m]))
+              format: { type: byterate, options: { maximumFractionDigits: 1 } }
+            - label: 24h
+              query: round(increase(node_network_receive_bytes_total{device="wlp2s0"}[24h]) + increase(node_network_transmit_bytes_total{device="wlp2s0"}[24h]))
+              format: { type: bytes, options: { maximumFractionDigits: 1 } }
+    - Homelab AI:
+        icon: open-webui.svg
+        href: http://{{HOMEPAGE_VAR_HOSTNAME}}:8081
+        description: Local LLMs via Ollama
+        server: local
+        container: ollama
+        widget:
+          type: prometheusmetric
+          url: http://prometheus:9090
+          refreshInterval: 10000
+          metrics:
+            - label: CPU
+              query: round(sum(rate(container_cpu_usage_seconds_total{name="ollama"}[2m])) * 100, 0.01)
+              format: { type: text, suffix: " %" }
+            - label: Memory
+              query: sum(container_memory_working_set_bytes{name="ollama"})
+              format: { type: bbytes, options: { maximumFractionDigits: 1 } }
+            - label: Uptime
+              query: round((time() - max(container_start_time_seconds{name="ollama"})) / 3600, 0.1)
+              format: { type: text, suffix: " h" }

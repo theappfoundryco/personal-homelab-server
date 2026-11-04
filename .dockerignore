@@ -1,0 +1,10 @@
+.git
+.private
+.env
+*.env
+tests
+demo
+docs
+host
+scripts
+**/__pycache__

@@ -1,0 +1,11 @@
+name: location
+title: "Where you are"
+description: "Where you are. Weather follows it (a shared pin, the internet location, or a Name-in-City calendar event)."
+version: 0.1.0
+default: true
+requires: [calendar]
+optional: [internet]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  home_cards: []

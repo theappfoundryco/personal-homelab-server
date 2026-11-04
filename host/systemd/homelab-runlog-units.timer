@@ -1,0 +1,7 @@
+[Unit]
+Description=Every 10 minutes: host timer runs into the run log
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+[Install]
+WantedBy=timers.target

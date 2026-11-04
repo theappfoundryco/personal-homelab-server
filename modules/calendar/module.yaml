@@ -1,0 +1,11 @@
+name: calendar
+title: "Your calendar"
+description: "Your calendar. Shows what is on today and tomorrow (a secret iCal link, set in the setup wizard)."
+version: 0.1.0
+default: true
+requires: []
+optional: [internet, calendar]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  home_cards: [my-day]

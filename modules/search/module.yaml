@@ -1,0 +1,11 @@
+name: search
+title: "Search, links, photos and voice"
+description: "Ask anything fresh and get an answer with sources. Send a link, photo or voice note and get it summarised or read. Needs internet; photos and voice need local AI helpers."
+version: 0.1.0
+default: true
+requires: []
+optional: [ollama, internet, whisper]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: []

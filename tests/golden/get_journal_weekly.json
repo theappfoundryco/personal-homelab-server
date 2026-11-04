@@ -1,0 +1,19 @@
+{
+ "body": {
+  "from": "2026-10-28",
+  "nights": 4,
+  "status": "pending",
+  "to": "2026-11-03",
+  "week": "2026-11-04",
+  "written": [
+   false,
+   true,
+   false,
+   true,
+   false,
+   true,
+   true
+  ]
+ },
+ "status": 200
+}

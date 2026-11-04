@@ -1,0 +1,82 @@
+{
+ "body": {
+  "achieved": [],
+  "goals": [
+   {
+    "added": 1788609600.0,
+    "done": false,
+    "id": "2702878b",
+    "text": "Run a 10k"
+   },
+   {
+    "added": 1788609600.0,
+    "done": false,
+    "id": "3d114802",
+    "text": "Read 20 books this year"
+   },
+   {
+    "added": 1788609600.0,
+    "done": false,
+    "id": "20500494",
+    "text": "Sleep before midnight"
+   },
+   {
+    "added": 1788609600.0,
+    "done": true,
+    "id": "793b4c32",
+    "text": "Learn 50 words of Spanish"
+   }
+  ],
+  "notes": [
+   {
+    "added": 1793707200.0,
+    "id": "07f194f9",
+    "text": "Buy oat milk"
+   },
+   {
+    "added": 1793620800.0,
+    "id": "f319c125",
+    "text": "Renew library card"
+   },
+   {
+    "added": 1793534400.0,
+    "id": "3f4df561",
+    "text": "Book dentist"
+   },
+   {
+    "added": 1793448000.0,
+    "id": "33094d35",
+    "text": "Try the new ramen place"
+   },
+   {
+    "added": 1793361600.0,
+    "id": "d6d7b3b8",
+    "text": "Fix the bike light"
+   },
+   {
+    "added": 1793275200.0,
+    "id": "05379ff6",
+    "text": "Ideas for the weekend project"
+   },
+   {
+    "added": 1793188800.0,
+    "id": "9f0fda8d",
+    "text": "Reply to Jo about dinner"
+   }
+  ],
+  "past": {
+   "notes": 0,
+   "reminders": 0
+  },
+  "reminders": [
+   {
+    "due": 1793782800.0,
+    "id": "ab61a7b1",
+    "repeat": null,
+    "text": "Water the plants",
+    "when": "tomorrow at 9:00 AM"
+   }
+  ]
+ },
+ "status": 200
+}

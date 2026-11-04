@@ -1,0 +1,5 @@
+[Unit]
+Description=Collect 24h homelab events and website uptime for the morning briefing
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-daily-stats

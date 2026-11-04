@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Collects homelab events, website uptime and SSD health for the briefing, bot and landing page.
+
+Writes /var/lib/homelab-stats/daily.json, which n8n, the bot and the landing page read (mounted read-only).
+Run every 10 min by homelab-daily-stats.timer.
+"""
+import json, os, re, sqlite3, subprocess, time
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
+
+OUT = "/var/lib/homelab-stats/daily.json"
+KUMA_DB = "/var/lib/docker/volumes/homelab_uptime-kuma-data/_data/kuma.db"
+SGT = timezone(timedelta(hours=8))
+now = time.time()
+
+
+def sh(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+    except Exception:
+        return ""
+
+
+def hhmm(ts, with_day=False):
+    return datetime.fromtimestamp(ts, SGT).strftime("%a %H:%M" if with_day else "%H:%M")
+
+
+def collect_events(hours):
+    """(timestamp, text) events from the watchdog, backups, Watchtower and Uptime Kuma."""
+    events, drops = [], []
+    for tag in ("homelab-watchdog", "homelab-backup"):
+        for line in sh("journalctl", "-t", tag, "--since", f"{hours} hours ago", "-o", "json", "--no-pager").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            ts = int(e["__REALTIME_TIMESTAMP"]) / 1e6
+            msg = e.get("MESSAGE", "")
+            if not isinstance(msg, str):
+                continue
+            if msg.startswith("network check failed (1)"):
+                drops.append(ts)
+            elif msg == "cycling Wi-Fi":
+                events.append((ts, "Watchdog restarted Wi-Fi"))
+            elif msg == "restarting NetworkManager":
+                events.append((ts, "Watchdog restarted networking"))
+            elif msg.startswith("network down 30 min"):
+                events.append((ts, "Network down 30 min, watchdog rebooted the server"))
+            elif m := re.match(r"restarting unhealthy (\S+)", msg):
+                events.append((ts, f"Watchdog restarted {m[1]} (unhealthy)"))
+            elif m := re.match(r"started (\d+) stopped container", msg):
+                events.append((ts, f"Watchdog started {m[1]} stopped container(s)"))
+            elif msg.startswith("docker inactive"):
+                events.append((ts, "Watchdog restarted Docker"))
+            elif msg.startswith("tailscaled inactive") or msg.startswith("tailscale state="):
+                events.append((ts, "Tailscale disconnected, watchdog reconnected it"))
+            elif m := re.match(r"re-adding tailscale serve :(\d+)", msg):
+                events.append((ts, f"Watchdog restored Tailscale port {m[1]}"))
+            elif msg.startswith("boot complete"):
+                how = "after a power cut or crash" if "unexpected" in msg else "(clean restart)"
+                events.append((ts, f"Server rebooted {how}"))
+            elif m := re.match(r"backup ok (\S+) drive=(\w+)", msg):
+                drive = {"ok": "copied to Google Drive", "off": "Google Drive not connected"}.get(m[2], "Google Drive upload FAILED")
+                events.append((ts, f"Backup saved ({m[1]}), {drive}"))
+            elif msg.startswith("backup failed"):
+                events.append((ts, "Backup FAILED"))
+            elif msg.startswith("bot reboot"):
+                events.append((ts, "Rebooted from Telegram"))
+    if drops:
+        n = len(drops)
+        events.append((drops[0], f"Network dropped {n} time{'s' if n > 1 else ''}" + (f" (first at {hhmm(drops[0])})" if n > 1 else "")))
+
+    grouped = OrderedDict()  # repeated identical events: keep first time, add a count
+    for ts, text in sorted(events):
+        if text in grouped:
+            grouped[text][1] += 1
+        else:
+            grouped[text] = [ts, 1]
+    events = [(ts, text + (f" ({n}x)" if n > 1 else "")) for text, (ts, n) in grouped.items()]
+
+    updated, failed, first_ts = [], [], None
+    wt = subprocess.run(["docker", "logs", "--since", f"{hours}h", "watchtower"], capture_output=True, text=True)
+    for line in (wt.stdout + wt.stderr).splitlines():
+        tm = re.search(r'time=(\S+)', line)
+        c = re.search(r' (?:container|name)=(\S+)', line)
+        if not (tm and c):
+            continue
+        ts = datetime.fromisoformat(tm[1]).timestamp()
+        if 'msg="Started new container"' in line:
+            updated.append(c[1]); first_ts = first_ts or ts
+        elif "Updated container state to failed" in line or 'msg="Unable to update' in line:
+            failed.append(c[1]); first_ts = first_ts or ts
+    if updated:
+        events.append((first_ts, "Updated " + ", ".join(sorted(set(updated)))))
+    if failed:
+        events.append((first_ts, "Update failed for " + ", ".join(sorted(set(failed)))))
+
+    try:
+        db = sqlite3.connect(f"file:{KUMA_DB}?mode=ro", uri=True, timeout=10)
+        names = dict(db.execute("select id, name from monitor where active = 1"))
+        for mid, t, status in db.execute(
+                "select monitor_id, time, status from heartbeat where important = 1 "
+                f"and time > datetime('now', '-{hours} hours') order by time"):
+            if mid in names:
+                ts = datetime.fromisoformat(t).replace(tzinfo=timezone.utc).timestamp()
+                events.append((ts, f"{names[mid].strip()} went {'DOWN' if status == 0 else 'back UP'}"))
+        db.close()
+    except Exception:
+        pass
+    return sorted(events)
+
+
+def site_stats(table, since):
+    out = []
+    try:
+        db = sqlite3.connect(f"file:{KUMA_DB}?mode=ro", uri=True, timeout=10)
+        names = dict(db.execute("select id, name from monitor where active = 1"))
+        for mid, up, down, ping in db.execute(
+                f"select monitor_id, sum(up), sum(down), sum(ping * up) / max(sum(up), 1) "
+                f"from {table} where timestamp > ? group by monitor_id", (int(since),)):
+            if mid in names and (up or down):
+                out.append({"id": mid, "name": names[mid].strip(), "uptime": round(100 * up / (up + down), 2),
+                            "avg_ms": round(ping or 0), "down_checks": down})
+        current = dict(db.execute("select monitor_id, status from heartbeat where id in "
+                                  "(select max(id) from heartbeat group by monitor_id)"))
+        for s in out:
+            s["up_now"] = current.get(s.pop("id")) == 1
+        db.close()
+    except Exception:
+        pass  # Kuma DB busy or missing: consumers show "website stats unavailable"
+    return sorted(out, key=lambda s: s["name"].lower())
+
+
+def ssd_health():
+    try:
+        j = json.loads(sh("smartctl", "-j", "-a", "/dev/nvme0"))
+        h = j["nvme_smart_health_information_log"]
+        d = {"used_pct": h.get("percentage_used", 0), "spare_pct": h.get("available_spare", 100),
+             "media_errors": h.get("media_errors", 0), "critical": h.get("critical_warning", 0),
+             "temp": h.get("temperature"), "hours": h.get("power_on_hours"), "unsafe_shutdowns": h.get("unsafe_shutdowns")}
+        issues = []
+        if d["critical"]: issues.append("SSD reports a critical warning")
+        if d["media_errors"]: issues.append(f"SSD has {d['media_errors']} media errors")
+        if d["spare_pct"] < 20: issues.append(f"SSD spare blocks low ({d['spare_pct']}%)")
+        if d["used_pct"] >= 80: issues.append(f"SSD is {d['used_pct']}% worn")
+        d["issues"] = issues
+        return d
+    except Exception:
+        return None
+
+
+def backups():
+    """Last successful and last failed backup in the past 30 days, nightly (Google Drive) and the SATA drive."""
+    out = {}
+    for tag, where in (("homelab-backup", "nightly"), ("homelab-usb-backup", "SATA")):
+        for line in sh("journalctl", "-t", tag, "--since", "30 days ago", "-o", "json", "--no-pager").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            msg, ts = e.get("MESSAGE", ""), int(int(e["__REALTIME_TIMESTAMP"]) / 1e6)
+            k = "ok" if isinstance(msg, str) and " ok " in f" {msg} " else "fail" if isinstance(msg, str) and "failed" in msg else None
+            if k and ts > out.get(k, {}).get("at", 0):
+                out[k] = {"at": ts, "where": where}
+            if k == "ok":
+                out.setdefault("ok_by", {})[where] = max(ts, out.get("ok_by", {}).get(where, 0))
+    return out
+
+
+events = collect_events(24)
+week = collect_events(24 * 7)
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
+tmp = OUT + ".tmp"
+with open(tmp, "w") as f:
+    json.dump({
+        "generated": int(now),
+        "events": [{"time": hhmm(ts), "text": text} for ts, text in events],
+        "sites": site_stats("stat_hourly", now - 86400),
+        "week": {"events": [{"time": hhmm(ts, True), "text": text} for ts, text in week],
+                 "sites": site_stats("stat_daily", now - 7 * 86400)},
+        "ssd": ssd_health(),
+        "backups": backups(),
+    }, f, indent=1)
+os.chmod(tmp, 0o644)
+os.replace(tmp, OUT)

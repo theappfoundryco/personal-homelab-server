@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0e0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Homelab">
+<title>Homelab</title>
+<link rel="manifest" href="/manifest.webmanifest?v=10">
+<link rel="apple-touch-icon" href="/icon-180.png?v=10">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  // Theme before first paint (no flash): your saved choice on this device, else dark.
+  (() => {
+    let t = null; try { localStorage.removeItem('theme'); localStorage.removeItem('theme-choice'); t = localStorage.getItem('theme-pick'); } catch (e) {}
+    t = t === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === 'dark' ? '#0f0e0d' : '#f4f3f0';
+  })();
+</script>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/journal.css">
+<link rel="stylesheet" href="css/planner.css">
+<link rel="stylesheet" href="css/server.css">
+<link rel="stylesheet" href="css/gym.css">
+<link rel="stylesheet" href="css/shell.css">
+<link rel="stylesheet" href="css/health.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/weather.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/wizard.css">
+</head>
+<body>
+<div class="edge" aria-hidden="true"><i></i><i></i><i></i></div>
+<main>
+  <!-- ============ HOME ============ -->
+  <section class="view" id="v-home">
+    <header class="top">
+      <div><h1 id="greet">Hello</h1><p id="when"></p><button type="button" class="sysline" id="status" aria-label="Server status"><i class="dot"></i><span>Checking your server</span><em class="more">View</em></button></div>
+      <div class="top-acts"><button class="icon-btn" id="home-refresh" aria-label="Refresh calendar, weather and everything on Home. Hold to reload the whole page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+      <button class="icon-btn" id="settings-open" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="icon-btn" id="theme" aria-label="Switch light or dark mode"></button></div>
+    </header>
+
+    <section class="card weather" data-card="weather" id="weather" role="button" tabindex="0" aria-label="Open weather"><div class="deg">–</div><div><div class="t">&nbsp;</div><div class="d">Loading weather</div></div></section>
+    <div id="needs"></div>
+    <section class="card finish" id="finish" hidden></section>
+
+    <button class="brief-btn" data-card="brief" id="brief-open">
+      <span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 18.5h19M6.5 18.5a5.5 5.5 0 0 1 11 0"/><path d="M12 4v4M4.6 9.1l2.1 2.1M19.4 9.1l-2.1 2.1M9.5 6.5 12 4l2.5 2.5"/></svg></span><span><b>Brief me</b><small>Weather, your day and the news</small></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+
+
+
+    <div class="acts home-acts" data-card="shortcuts">
+      <button class="card act" id="news-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h10A1.5 1.5 0 0 1 17 5.5V18a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M17 8.5h2.5A1.5 1.5 0 0 1 21 10v8a2 2 0 0 1-2 2"/><path d="M7.5 8h6M7.5 11.5h6M7.5 15h3.5"/></svg><span>News</span></button>
+      <button class="card act" id="notes-open" aria-label="Planner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5l1.5 1.5L8 5.5M4 12.5l1.5 1.5L8 11.5M4 18.5l1.5 1.5L8 17.5M11.5 7h8.5M11.5 13h8.5M11.5 19h8.5"/></svg><span>Planner</span><i class="pdot" id="plan-dot" hidden></i></button>
+    </div>
+
+    <div class="label" data-card="today">Your day</div>
+    <section class="card list" data-card="today" id="today"><div class="empty">Loading your calendar…</div></section>
+
+    <div class="label" data-card="clocks">World clock<span class="clk-acts"><button id="clocks-edit" hidden>Edit</button><button id="clocks-add" aria-label="Add a city">+ Add</button></span></div>
+    <section class="card list clk-add" id="clocks-find" hidden><input id="clocks-q" type="search" autocomplete="off" spellcheck="false" placeholder="Type a city, like Tokyo or Mumbai" aria-label="Find a city"><div id="clocks-hits"></div></section>
+    <section class="card list" data-card="clocks" id="clocks"></section>
+    <p class="clk-sub" data-card="clocks" id="clocks-sub"></p>
+  </section>
+
+  <!-- ============ JOURNAL ============ -->
+  <section class="view" id="v-journal" hidden>
+    <div class="top"><div><h1>Journal</h1><p id="j-sub">Ten minutes on your day</p></div></div>
+    <div id="j-today"><div class="skel"></div></div>
+    <div id="j-week"></div>
+    <div id="j-letter"></div>
+    <div id="j-deep"></div>
+    <div id="j-recent"></div>
+    <div class="label">Calendar</div>
+    <div id="j-cal"></div>
+    <button class="card row-btn" id="jlet-open"><span class="jic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13.5" rx="2.2"/><path d="M3.6 7.2l5.9 4.3M20.4 7.2l-5.9 4.3"/><path d="M12 16.4s-2.7-1.6-2.7-3.4a1.35 1.35 0 0 1 2.7-.6 1.35 1.35 0 0 1 2.7.6c0 1.8-2.7 3.4-2.7 3.4z" fill="currentColor"/></svg></span><span><b>Letters from your journal</b><small>One on the 1st of every month</small></span><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></span></button>
+    <button class="card row-btn" id="jther-open"><span class="jic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11s-3.5-2-3.5-4.4A1.85 1.85 0 0 1 12 5.7a1.85 1.85 0 0 1 3.5.9C15.5 9 12 11 12 11z"/><path d="M3 14h2.5l3.3 2h3.7a1.4 1.4 0 0 1 0 2.8H9.5"/><path d="M12.6 18.6l5-2.4a1.5 1.5 0 0 1 1.8 2.3L16 21H8l-2.5-1.3H3"/></svg></span><span><b>For your therapist</b><small>Moods and key moments, ready to share</small></span><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></span></button>
+    <button class="card row-btn" id="jfind-open"><span class="jic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg></span><span><b>Find and replace</b><small>Fix a name or word across your entries</small></span><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></span></button>
+    <div id="j-queue"></div>
+  </section>
+
+  <!-- ============ NOTES ============ -->
+
+  <!-- ============ GYM ============ -->
+  <section class="view" id="v-gym" hidden>
+    <div class="top"><div><h1>Gym</h1><p id="gym-sub">Strength log</p></div></div>
+    <div id="gym-body"></div>
+  </section>
+
+  <!-- ============ SG (personal, locked) ============ -->
+  <section class="view" id="v-sg" hidden>
+    <div class="top"><div><h1>Health</h1><p>Medicines and appointments</p></div></div>
+    <div id="sg-body"></div>
+  </section>
+
+  <!-- ============ SERVER ============ -->
+  <section class="view" id="v-server" hidden>
+    <div class="top"><div><h1>Server &amp; Apps</h1><p id="server-sub">Health and your apps</p></div>
+      <button class="icon-btn" id="server-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div>
+    <div class="err srv-err" id="server-err" hidden></div>
+    <div class="acts">
+      <button class="card act" id="act-free"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M10 10h4v4h-4zM9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/></svg><span>Free AI memory</span></button>
+      <button class="card act" id="act-restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg><span>Restart an app</span></button>
+      <button class="card act danger" id="act-reboot" aria-label="Restart server, press and hold"><i class="fill"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v8M6.6 6.6a7.5 7.5 0 1 0 10.8 0"/></svg><span id="reboot-label">Hold to restart server</span></button>
+    </div>
+    <div class="toast" id="act-msg"></div>
+    <div id="server-body"></div>
+    <button class="news-btn" id="hw-open">
+      <span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 12h4l2-3.5 3 7 2-3.5h7"/></svg></span><span><b>Hardware specs and health</b><small>Specs, websites, last 24 hours</small></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+    <button class="news-btn" id="nl-open">
+      <span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5a5.5 5.5 0 1 0 5 8 4.5 4.5 0 0 1-5-8z"/><path d="M4 16h4M4 19.5h8"/></svg></span><span><b>Night log</b><small id="nl-sub">12 to 9 AM: what ran, when, and how long it took</small></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+    <div class="news-btn gitb" id="gitb">
+      <span class="nic"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></span><span><b>GitHub backup</b><small id="gitb-s">Checking…</small></span>
+      <button class="gitb-go" id="gitb-go">Back up</button>
+    </div>
+    <div class="label">Everyday apps</div><section class="apps" id="apps"></section>
+    <div class="label">Tools</div><section class="apps" id="tools"></section>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Sections"><div class="in">
+  <button class="tab on" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button class="tab" data-tab="journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.5 5 8.2 4.5 4 4.5v14c4.2 0 6.5.5 8 2 1.5-1.5 3.8-2 8-2v-14c-4.2 0-6.5.5-8 2z"/><path d="M12 6.5v14"/></svg>Journal</button>
+  <button class="tab" data-tab="gym"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="9" width="3" height="6" rx="1"/><rect x="5.5" y="6.5" width="3.5" height="11" rx="1.2"/><rect x="15" y="6.5" width="3.5" height="11" rx="1.2"/><rect x="18.5" y="9" width="3" height="6" rx="1"/><path d="M9 12h6"/></svg>Gym</button>
+  <button class="tab" data-tab="sg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.9-3.6 3.9-5.8 7.5-5.8s6.6 2.2 7.5 5.8"/></svg>Health</button>
+  <button class="tab" data-tab="server"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="4" width="17" height="6.5" rx="2"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"/><path d="M7 7.25h.01M7 16.75h.01M13 7.25h4M13 16.75h4"/></svg>Server &amp; Apps</button>
+</div></nav>
+
+<!-- Weather -->
+<div class="panel" id="wxp" hidden role="dialog" aria-modal="true" aria-label="Weather">
+  <div class="panel-head"><button class="done" data-close-wx>Done</button><h2>Weather</h2>
+    <div class="head-acts"><button class="icon-btn" id="wx-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner" id="wx-body"></div></div>
+</div>
+
+<!-- Gym day -->
+<div class="gshare" id="gshare" hidden role="dialog" aria-modal="true" aria-label="Share workout"></div>
+<div class="panel" id="gymh" hidden role="dialog" aria-modal="true" aria-labelledby="gymh-title">
+  <div class="panel-head"><button class="done" data-hback>Done</button><h2 id="gymh-title">History</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="gymh-body"></div></div>
+</div>
+<div class="panel" id="wtp" hidden role="dialog" aria-modal="true" aria-label="Weight">
+  <div class="panel-head"><button class="done" data-close-wt>Done</button><h2>Weight</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="wt-body"></div></div>
+</div>
+<div class="panel" id="gymp" hidden role="dialog" aria-modal="true" aria-labelledby="gym-title">
+  <div class="panel-head"><button class="done" data-close-gym>Done</button><h2 id="gym-title">Gym</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="gym-panel"></div></div>
+</div>
+
+<!-- Status -->
+<div class="panel" id="statp" hidden role="dialog" aria-modal="true" aria-label="Status">
+  <div class="panel-head"><button class="done" data-close-stat>Done</button><h2>Status</h2>
+    <div class="head-acts"><button class="icon-btn" id="stat-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner" id="stat-body"></div></div>
+</div>
+
+<!-- News -->
+<div class="panel" id="nlp" hidden role="dialog" aria-modal="true" aria-label="Night log">
+  <div class="panel-head"><button class="done" data-close-nl>Done</button><h2>Night log</h2>
+    <div class="head-acts"><button class="icon-btn" id="nl-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner" id="nl-body"></div></div>
+</div>
+<div class="panel" id="hwp" hidden role="dialog" aria-modal="true" aria-label="Hardware specs and health">
+  <div class="panel-head"><button class="done" data-close-hw>Done</button><h2>Hardware specs and health</h2>
+    <div class="head-acts"><button class="icon-btn" id="hw-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner" id="hw-body"></div></div>
+</div>
+
+<div class="panel" id="setp" hidden role="dialog" aria-modal="true" aria-label="Settings">
+  <div class="panel-head"><button class="done" id="set-back">Done</button><h2 id="set-title">Settings</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="set-body"></div></div>
+</div>
+
+<div class="panel" id="wizp" hidden role="dialog" aria-modal="true" aria-label="Setup">
+  <div class="panel-head"><button class="done" id="wiz-close">Later</button><h2>Set up</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="wiz-body"></div></div>
+</div>
+
+<div class="panel" id="notesp" hidden role="dialog" aria-modal="true" aria-label="Planner">
+  <div class="panel-head"><button class="done" data-close-notes>Done</button><h2>Planner</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="notes-body"></div></div>
+</div>
+<div class="panel" id="pastp" hidden role="dialog" aria-modal="true" aria-label="Past">
+  <div class="panel-head"><button class="done" data-close-past>Done</button><h2>Past</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner">
+    <div class="seg ptabs"><button data-pt="reminders">Reminders</button><button data-pt="notes">Notes</button><button data-pt="goals">Goals</button></div>
+    <div class="card psearch"><input id="past-q" type="search" placeholder="Search" aria-label="Search" autocomplete="off" enterkeyhint="search"></div>
+    <div id="past-list"></div>
+  </div></div>
+</div>
+
+<div class="panel" id="askp" hidden role="dialog" aria-modal="true" aria-label="Ask AI">
+  <div class="panel-head"><button class="done" data-close-ask>Done</button><h2>Ask AI</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner">
+    <form class="card ask" id="ask-form" autocomplete="off">
+      <textarea id="ask" rows="1" placeholder="What should I pack for Delhi?" enterkeyhint="send" aria-label="Ask the AI"></textarea>
+      <button class="pill" type="submit">Ask</button>
+    </form>
+    <div class="card answer" id="answer" hidden></div>
+    <p class="hint">Runs on your server, private to you. Ask about anything: packing, plans, a quick explanation.</p>
+  </div></div>
+</div>
+
+<div class="panel" id="newsp" hidden role="dialog" aria-modal="true" aria-label="News">
+  <div class="panel-head"><button class="done" data-close-news>Done</button><h2>News</h2>
+    <div class="head-acts"><button class="icon-btn" id="news-refresh" aria-label="Refresh news"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner"><div class="meta"><span id="news-when">Latest from around the world</span></div><div id="news-body"></div></div></div>
+</div>
+
+<!-- Journal -->
+<div class="panel" id="jther" hidden role="dialog" aria-modal="true" aria-label="For your therapist">
+  <div class="panel-head"><button class="done" data-close-jther>Done</button><h2>For your therapist</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jther-body"></div></div>
+</div>
+<div class="panel" id="jwks" hidden role="dialog" aria-modal="true" aria-label="Weekly summaries">
+  <div class="panel-head"><button class="done" data-close-jwks>Done</button><h2>Weekly summaries</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jwks-body"></div></div>
+</div>
+<div class="panel" id="jlet" hidden role="dialog" aria-modal="true" aria-label="Letters from your journal">
+  <div class="panel-head"><button class="done" data-close-jlet>Done</button><h2>Monthly letters</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jlet-body"></div></div>
+</div>
+<div class="panel" id="jdeep" hidden role="dialog" aria-modal="true" aria-label="Deep insights">
+  <div class="panel-head"><button class="done" data-close-jdeep>Done</button><h2>Deep insights</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jdeep-body"></div></div>
+</div>
+<div class="panel" id="jdsub" hidden role="dialog" aria-modal="true" aria-labelledby="jdsub-t">
+  <div class="panel-head"><button class="done" data-close-jdsub>Done</button><h2 id="jdsub-t"></h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jdsub-body"></div></div>
+</div>
+<div class="panel" id="jq" hidden role="dialog" aria-modal="true" aria-label="Queued for a fresh summary">
+  <div class="panel-head"><button class="done" data-close-jq>Done</button><h2>Queued for tonight</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner" id="jq-body"></div></div>
+</div>
+<div class="panel" id="jfind" hidden role="dialog" aria-modal="true" aria-label="Find and replace">
+  <div class="panel-head"><button class="done" data-close-jfind>Done</button><h2>Find and replace</h2><div class="head-acts"></div></div>
+  <div class="panel-body"><div class="inner">
+    <div class="card jf">
+      <div class="jf-row"><input id="jf-find" placeholder="Find" aria-label="Find" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><div class="seg" aria-label="How it matches"><button class="on" data-jfm="matches">Matches</button><button data-jfm="contains">Contains</button></div></div>
+      <input id="jf-rep" placeholder="Replace with" aria-label="Replace with" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+    </div>
+    <div class="jf-scope"><div class="seg"><button class="on" data-jfs="month">This month</button><button data-jfs="all">All</button></div></div>
+    <div id="jf-res"></div>
+  </div></div>
+</div>
+<div class="panel" id="jent" hidden role="dialog" aria-modal="true" aria-labelledby="jent-title">
+  <div class="panel-head"><button class="done" data-close-jent>Done</button><h2 class="jnav"><button data-jstep="-1" aria-label="Previous day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button><span id="jent-title">Entry</span><button data-jstep="1" aria-label="Next day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button></h2>
+    <div class="head-acts"><button class="icon-btn" id="jent-del" aria-label="Delete this entry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner" id="jent-body"></div></div>
+</div>
+
+<!-- Briefing -->
+<div class="panel" id="brief" hidden role="dialog" aria-modal="true" aria-label="Briefing">
+  <div class="panel-head"><button class="done" data-close-brief>Done</button><h2>Briefing</h2>
+    <div class="head-acts"><button class="icon-btn" id="brief-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button></div></div>
+  <div class="panel-body"><div class="inner">
+    <div id="brief-body"></div>
+  </div></div>
+</div>
+
+<!-- Are you sure? (one sheet for every remove/cancel, so buttons never change size under your finger) -->
+<div class="cfm" id="cfm" hidden><div class="sheet-bg" data-cfm-no></div>
+  <div class="cfm-c" role="alertdialog" aria-modal="true" aria-labelledby="cfm-t" aria-describedby="cfm-x">
+    <h2 id="cfm-t"></h2><p id="cfm-x"></p><button class="cfm-ok" data-cfm-ok></button><button class="cfm-no" data-cfm-no>Cancel</button></div></div>
+<!-- Planner: save as a note, reminder or goal (the AI's pick is marked) -->
+<div class="cfm" id="kindp" hidden><div class="sheet-bg" data-kind-no></div>
+  <div class="cfm-c" role="dialog" aria-modal="true" aria-labelledby="kindp-t"><h2 id="kindp-t">Save as</h2><div class="kind-opts" id="kind-opts"></div><button class="cfm-no" data-kind-no>Cancel</button></div></div>
+<!-- Planner: tap a goal to edit, achieve or delete it -->
+<div class="cfm" id="goalp" hidden><div class="sheet-bg" data-goal-no></div>
+  <div class="cfm-c" role="dialog" aria-modal="true" aria-labelledby="goalp-t"><h2 id="goalp-t">Your goal</h2><p id="goalp-x"></p><div class="kind-opts" id="goal-opts"></div><button class="cfm-no" data-goal-no>Cancel</button></div></div>
+<div class="snack" id="snack" role="status" aria-live="polite"></div>
+
+<!-- App viewer -->
+<div class="sheet-wrap" id="sheet" hidden>
+  <div class="sheet-bg" data-close-sheet></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="grab"></div>
+    <div class="sheet-head"><button class="done" data-close-sheet>Done</button><h2 id="sheet-title">Restart an app</h2><div class="head-acts"></div></div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
+<!-- Your own mood score for a day -->
+<div class="sheet-wrap" id="jms" hidden>
+  <div class="sheet-bg" data-jms-no></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="jms-title">
+    <div class="grab"></div>
+    <div class="sheet-head"><button class="done" data-jms-no>Cancel</button><h2 id="jms-title">How did it feel?</h2><div class="head-acts"></div></div>
+    <div class="sheet-body" id="jms-body"></div>
+  </div>
+</div>
+
+<div class="panel" id="viewer" hidden role="dialog" aria-modal="true" aria-labelledby="viewer-title">
+  <div class="panel-head"><button class="done" id="viewer-done">Done</button><h2 id="viewer-title"></h2>
+    <div class="head-acts">
+      <button class="icon-btn" id="viewer-reload" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+      <button class="icon-btn" id="viewer-out" aria-label="Open in Safari"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>
+    </div></div>
+  <div class="viewer-body"><div class="viewer-load">Opening…</div><iframe id="viewer-frame" title="App" allow="clipboard-read; clipboard-write; microphone; fullscreen"></iframe></div>
+</div>
+
+<script src="js/shell.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/home.js"></script>
+<script src="js/briefing.js"></script>
+<script src="js/planner.js"></script>
+<script src="js/apps.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/wizard.js"></script>
+<script src="js/loader.js"></script>
+</body>
+</html>

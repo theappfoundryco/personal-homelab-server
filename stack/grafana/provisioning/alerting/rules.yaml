@@ -1,0 +1,325 @@
+{
+ "apiVersion": 1,
+ "groups": [
+  {
+   "orgId": 1,
+   "name": "homelab",
+   "folder": "Homelab",
+   "interval": "1m",
+   "rules": [
+    {
+     "uid": "cpu-hot",
+     "title": "CPU running hot",
+     "condition": "C",
+     "for": "5m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "CPU package is above 80°C"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "node_thermal_zone_temp{type=\"x86_pkg_temp\"}",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "gt",
+           "params": [
+            80
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "uid": "nvme-hot",
+     "title": "NVMe running hot",
+     "condition": "C",
+     "for": "5m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "NVMe SSD is above 70°C"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "max(node_hwmon_temp_celsius{chip=\"nvme_nvme0\"})",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "gt",
+           "params": [
+            70
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "uid": "disk-full",
+     "title": "Disk filling up",
+     "condition": "C",
+     "for": "10m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "Root disk is more than 85% full"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "gt",
+           "params": [
+            85
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "uid": "mem-pressure",
+     "title": "Memory pressure",
+     "condition": "C",
+     "for": "10m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "RAM usage above 90% for 10 minutes"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "gt",
+           "params": [
+            90
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "uid": "cpu-pinned",
+     "title": "CPU pinned",
+     "condition": "C",
+     "for": "15m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "CPU above 90% for 15 minutes"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "gt",
+           "params": [
+            90
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "uid": "node-down",
+     "title": "Host metrics missing",
+     "condition": "C",
+     "for": "2m",
+     "noDataState": "OK",
+     "execErrState": "Error",
+     "annotations": {
+      "summary": "node-exporter is not reporting, the host may be in trouble"
+     },
+     "labels": {
+      "severity": "warning"
+     },
+     "data": [
+      {
+       "refId": "A",
+       "datasourceUid": "prometheus",
+       "relativeTimeRange": {
+        "from": 300,
+        "to": 0
+       },
+       "model": {
+        "refId": "A",
+        "expr": "up{job=\"node\"}",
+        "instant": true
+       }
+      },
+      {
+       "refId": "C",
+       "datasourceUid": "__expr__",
+       "relativeTimeRange": {
+        "from": 0,
+        "to": 0
+       },
+       "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "A",
+        "conditions": [
+         {
+          "evaluator": {
+           "type": "lt",
+           "params": [
+            1
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

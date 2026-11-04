@@ -1,0 +1,11 @@
+name: ai
+title: "AI models and usage"
+description: "See which AI models are loaded, how many tokens each feature used, and load or unload models by hand."
+version: 0.1.0
+default: true
+requires: []
+optional: [ollama]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: [ai_usage]

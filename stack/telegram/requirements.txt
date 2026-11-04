@@ -1,0 +1,4 @@
+PyYAML==6.0.3
+anthropic==2.4.0
+youtube-transcript-api==1.2.4
+tzdata==2025.2

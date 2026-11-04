@@ -1,0 +1,9 @@
+[Unit]
+Description=Mirror homelab config and data to a private git remote (optional)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/homelab/host.env
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-git-sync

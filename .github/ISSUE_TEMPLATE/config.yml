@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/theappfoundryco/personal-homelab-server/discussions
+    about: Questions, setup help and open-ended ideas belong in Discussions.
+  - name: Report a security problem
+    url: https://github.com/theappfoundryco/personal-homelab-server/security/advisories/new
+    about: Report it privately here. Please do not open a public issue.

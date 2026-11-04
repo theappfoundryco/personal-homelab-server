@@ -1,0 +1,31 @@
+title: Homelab
+description: Homelab command center
+favicon: https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/homepage.svg
+theme: dark
+color: zinc
+headerStyle: clean
+statusStyle: dot
+hideVersion: true
+fullWidth: true
+useEqualHeights: true
+cardBlur: sm
+disableCollapse: true
+target: _blank
+bookmarksStyle: icons
+layout:
+  Server:
+    style: row
+    columns: 4
+    icon: mdi-server-network
+  Observability:
+    style: row
+    columns: 4
+    icon: mdi-chart-timeline-variant
+  Automation:
+    style: row
+    columns: 4
+    icon: mdi-robot-outline
+  Network & AI:
+    style: row
+    columns: 4
+    icon: mdi-lan

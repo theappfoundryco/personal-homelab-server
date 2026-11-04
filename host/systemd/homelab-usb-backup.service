@@ -1,0 +1,5 @@
+[Unit]
+Description=Homelab backup to the USB drive (attach, back up, detach)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-usb-backup

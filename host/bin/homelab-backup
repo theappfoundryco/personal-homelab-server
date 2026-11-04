@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Nightly homelab backup: configs + app databases into one archive, kept 7 days locally
+and 30 days in a cloud drive if you set HL_RCLONE_REMOTE (an rclone remote). Results go to journald (tag homelab-backup),
+which homelab-daily-stats turns into briefing events.
+"""
+import os, sqlite3, subprocess, sys, tarfile, tempfile, time
+from datetime import date
+
+LOCAL = "/var/backups/homelab"
+REMOTE = os.environ.get("HL_RCLONE_REMOTE", "")  # e.g. "mydrive:Homelab Backups"; empty = local backups only
+RUSER = os.environ.get("HL_RCLONE_USER", "")  # the Linux user whose rclone config holds that remote; empty = run as this user
+AS = ["sudo", "-u", RUSER] if RUSER else []
+VOL = "/var/lib/docker/volumes"
+DBS = {  # live SQLite databases, copied with the online backup API so they are consistent
+    "n8n.sqlite": f"{VOL}/homelab_n8n-data/_data/database.sqlite",
+    "kuma.db": f"{VOL}/homelab_uptime-kuma-data/_data/kuma.db",
+    "grafana.db": f"{VOL}/homelab_grafana-data/_data/grafana.db",
+    "open-webui.db": f"{VOL}/homelab_open-webui-data/_data/webui.db",
+}
+PATHS = ["/opt/homelab", "/var/lib/homelab-bot", "/etc/systemd/system", "/usr/local/bin"]
+
+
+def keep(t):
+    """Only homelab files from the shared system folders; no SearXNG cache."""
+    n = t.name
+    if n.startswith("opt_homelab/searxng/cache"):
+        return None
+    for folder in ("etc_systemd_system/", "usr_local_bin/"):
+        if n.startswith(folder) and "homelab" not in n:
+            return None
+    return t
+
+
+def log(msg):
+    subprocess.run(["logger", "-t", "homelab-backup", msg])
+    if sys.stdout.isatty():
+        print(msg)
+
+
+def main():
+    os.makedirs(LOCAL, mode=0o700, exist_ok=True)
+    out = f"{LOCAL}/homelab-{date.today():%Y-%m-%d}.tar.gz"
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, src in DBS.items():
+            if os.path.exists(src):
+                with sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=30) as s, sqlite3.connect(f"{tmp}/{name}") as d:
+                    s.backup(d)
+        with tarfile.open(out + ".part", "w:gz") as tar:
+            tar.add(tmp, arcname="databases")
+            for p in PATHS:
+                if os.path.exists(p):
+                    tar.add(p, arcname=p.strip("/").replace("/", "_"), filter=keep)
+    os.chmod(out + ".part", 0o600)
+    os.replace(out + ".part", out)
+    size = os.path.getsize(out)
+    for f in sorted(os.listdir(LOCAL))[:-7]:  # keep the newest 7 locally
+        os.remove(os.path.join(LOCAL, f))
+
+    drive = "off"
+    remotes = subprocess.run(AS + ["rclone", "listremotes"], capture_output=True, text=True).stdout if REMOTE else ""
+    if REMOTE and REMOTE.split(":")[0] + ":" in remotes:
+        r = subprocess.run(AS + ["rclone", "copy", out, REMOTE, "--timeout", "5m"],
+                           capture_output=True, text=True, input="")
+        if r.returncode == 0:
+            drive = "ok"
+            subprocess.run(AS + ["rclone", "delete", REMOTE, "--min-age", "30d"], capture_output=True)
+        elif "token" in r.stderr.lower() or "oauth" in r.stderr.lower():
+            drive = "off"  # the cloud login expired: reconnect it with rclone config
+        else:
+            drive = "failed"
+            print(r.stderr[-500:], file=sys.stderr)
+    log(f"backup ok {size / 1e6:.0f}MB drive={drive}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        log(f"backup failed: {e}")
+        sys.exit(1)

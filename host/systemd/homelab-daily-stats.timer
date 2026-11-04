@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh homelab daily stats every 10 minutes
+[Timer]
+OnBootSec=3min
+OnCalendar=*:0/10
+[Install]
+WantedBy=timers.target

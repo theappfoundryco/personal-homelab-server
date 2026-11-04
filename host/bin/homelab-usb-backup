@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Backups to the internal SATA SSD (label homelab-backup), 4 times a day.
+
+On the Mini's SATA port since 2026-10-24 (was a USB enclosure, hence the name). It stays unmounted between runs,
+so nothing writes to it and an unexpected power cut can't damage the filesystem.
+  homelab-usb-backup            mount, write a backup, unmount (what the timer runs)
+  homelab-usb-backup attach     mount it at /mnt/backup to work with the backups
+  homelab-usb-backup detach     unmount it
+  homelab-usb-backup status
+Archives are the same as the nightly backup, named by date and hour, kept 30 days.
+Results go to journald (tag homelab-usb-backup).
+"""
+import fcntl, os, sqlite3, subprocess, sys, tarfile, tempfile, time
+from datetime import datetime, timedelta
+from importlib.machinery import SourceFileLoader
+
+MNT, LABEL = "/mnt/backup", "homelab-backup"
+DEV = f"/dev/disk/by-label/{LABEL}"
+INFO = "/var/lib/homelab-stats/usb-drive.json"  # last known size/use, read by homelab-specs for the home page
+DIR, KEEP_DAYS = f"{MNT}/homelab", 30
+nightly = SourceFileLoader("nightly", "/usr/local/bin/homelab-backup").load_module()  # same databases and folders
+PATHS = nightly.PATHS
+
+
+def log(msg):
+    subprocess.run(["logger", "-t", "homelab-usb-backup", msg])
+    if sys.stdout.isatty():
+        print(msg)
+
+
+def mounted():
+    return os.path.ismount(MNT)
+
+
+def snapshot(backup_at=None):
+    """Remember the drive's size, use and backups while it's mounted (it's unreadable once detached)."""
+    import json
+    old = {}
+    try:
+        old = json.load(open(INFO))
+    except Exception:
+        pass
+    v = os.statvfs(MNT)
+    files = [f for f in os.listdir(DIR) if f.endswith(".tar.gz")] if os.path.isdir(DIR) else []
+    info = {**old, "size": v.f_blocks * v.f_frsize, "free": v.f_bavail * v.f_frsize,
+            "used": (v.f_blocks - v.f_bfree) * v.f_frsize, "backups": len(files), "checked": int(time.time())}
+    try:
+        info["smart"] = smart() or old.get("smart")
+    except Exception:
+        pass
+    newest = max((os.path.getmtime(os.path.join(DIR, f)) for f in files), default=None)
+    if backup_at or newest:
+        info["last_backup"] = int(backup_at or newest)
+    json.dump(info, open(INFO + ".tmp", "w"))
+    os.chmod(INFO + ".tmp", 0o644)
+    os.replace(INFO + ".tmp", INFO)
+
+
+def smart():
+    """SMART details of the SATA SSD."""
+    import json
+    disk = subprocess.run(["lsblk", "-no", "PKNAME", DEV], capture_output=True, text=True).stdout.strip()
+    r = subprocess.run(["timeout", "25", "smartctl", "-d", "sat", "-a", "-j", f"/dev/{disk}"], capture_output=True, text=True)
+    j = json.loads(r.stdout or "{}")
+    raw = {a["id"]: a["raw"]["value"] for a in (j.get("ata_smart_attributes") or {}).get("table", [])}
+    if not j.get("model_name"):
+        return None
+    bad = sum(raw.get(k, 0) for k in (5, 197, 198))
+    return {"model": j["model_name"], "capacity": (j.get("user_capacity") or {}).get("bytes"), "firmware": j.get("firmware_version", ""),
+            "sata": (j.get("interface_speed") or {}).get("current", {}).get("string", ""),
+            "ok": (j.get("smart_status") or {}).get("passed", True) and bad == 0, "bad_sectors": bad,
+            "life_pct": raw.get(169), "hours": (j.get("power_on_time") or {}).get("hours"),
+            "cycles": j.get("power_cycle_count"), "unsafe": raw.get(192), "temp": (j.get("temperature") or {}).get("current")}
+
+
+def refresh_page():
+    subprocess.run(["systemctl", "start", "--no-block", "homelab-specs.service"], capture_output=True)
+
+
+def attach():
+    if mounted():
+        return
+    if not os.path.exists(DEV):
+        raise RuntimeError("drive not found")
+    subprocess.run(["mount", MNT], check=True)
+
+
+def detach():
+    if mounted():
+        subprocess.run(["sync"])
+        subprocess.run(["umount", MNT], check=True)
+
+
+def backup():
+    os.makedirs(DIR, mode=0o700, exist_ok=True)
+    out = f"{DIR}/homelab-{datetime.now():%Y-%m-%d-%H%M}.tar.gz"
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, src in nightly.DBS.items():
+            if os.path.exists(src):
+                with sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=30) as s, sqlite3.connect(f"{tmp}/{name}") as d:
+                    s.backup(d)
+        with tarfile.open(out + ".part", "w:gz") as tar:
+            tar.add(tmp, arcname="databases")
+            for p in PATHS:
+                if os.path.exists(p):
+                    tar.add(p, arcname=p.strip("/").replace("/", "_"), filter=nightly.keep)
+    os.chmod(out + ".part", 0o600)
+    os.replace(out + ".part", out)
+    cutoff = f"homelab-{datetime.now() - timedelta(days=KEEP_DAYS):%Y-%m-%d}"
+    for f in os.listdir(DIR):
+        if f < cutoff or f.endswith(".part"):
+            os.remove(os.path.join(DIR, f))
+    free = os.statvfs(MNT)
+    return os.path.getsize(out), free.f_bavail * free.f_frsize, len(os.listdir(DIR))
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "run"
+    with open("/run/homelab-usb-backup.lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        if cmd == "attach":
+            attach(); snapshot(); refresh_page(); print(f"Mounted at {MNT}. Run 'homelab-usb-backup detach' when you're done.")
+        elif cmd == "detach":
+            detach(); refresh_page(); print("Detached.")
+        elif cmd == "status":
+            print(f"mounted at {MNT}" if mounted() else "connected, not mounted" if os.path.exists(DEV) else "not found")
+        else:
+            was = mounted()  # if you attached it by hand, leave it attached
+            try:
+                attach()
+                size, free, n = backup()
+                snapshot(time.time())
+                log(f"usb backup ok {size / 1e6:.0f}MB, {n} kept, {free / 1e9:.0f}GB free")
+            except Exception as e:
+                log(f"usb backup failed: {e}")
+                sys.exit(1)
+            finally:
+                if not was:
+                    try:
+                        detach()
+                    except Exception as e:
+                        log(f"usb detach failed: {e}")
+                refresh_page()
+
+
+if __name__ == "__main__":
+    main()

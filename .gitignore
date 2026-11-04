@@ -1,0 +1,36 @@
+# secrets
+.env
+*.env
+!.env.example
+!config/.env.example
+*.pem
+*.key
+*.pass
+*.secret*
+# personal data
+data/
+state*.json
+journal/
+# the journal module's code is not journal data
+!modules/journal/
+*.bak*
+*.log
+# maintainer-only notes and the personal denylist (never commit)
+.private/
+# local junk
+__pycache__/
+.DS_Store
+.venv/
+node_modules/
+tests/e2e/shots/
+
+# your own settings and keys (the installer creates these from the examples)
+stack/config.yaml
+stack/secrets/
+
+# maintainer files kept out of the repo (no dot, so they are easy to find)
+private/
+
+# local tool state (Claude, test caches, screenshots in progress); see .cache/README.md
+.cache/*
+!.cache/README.md

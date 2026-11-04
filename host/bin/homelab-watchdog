@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Homelab self-healing watchdog.
+#   homelab-watchdog boot   -> run once at startup: bring everything up, then notify phone
+#   homelab-watchdog check  -> run every 2 min by homelab-watchdog.timer
+set -uo pipefail
+
+MODE="${1:-check}"
+COMPOSE_DIR=/opt/homelab
+STATE=/var/lib/homelab-watchdog
+LOG_TAG=homelab-watchdog
+# tailnet port -> local port
+SERVE_MAP="80:3095 8099:8099 3080:3080 3000:3000 3001:3001 5678:5678 8081:8081 8888:8888 9090:9090 8889:8889 7780:7780"
+
+mkdir -p "$STATE"
+log() { logger -t "$LOG_TAG" "$*"; [ -t 1 ] && echo "$*"; return 0; }
+
+notify() { # title message: log only (no phone alerts for up/down; the 7 AM brief recaps problems)
+  logger -t "$LOG_TAG" "$1: $2"
+}
+
+# Alert once per problem, and once more when it clears.
+problem() { # key message
+  if [ ! -f "$STATE/$1" ]; then
+    echo "$2" > "$STATE/$1"
+    notify "Homelab: problem" "$2" warning 4
+  fi
+}
+cleared() { # key message
+  if [ -f "$STATE/$1" ]; then
+    rm -f "$STATE/$1"
+    notify "Homelab: recovered" "$2" white_check_mark 3
+  fi
+}
+
+# Counter for "N failures in a row" decisions.
+fails() { local f="$STATE/$1.count" n; n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 )); echo $n > "$f"; echo $n; }
+reset() { rm -f "$STATE/$1.count"; }
+
+check_network() {
+  local gw; gw=$(ip route | awk '/^default/ {print $3; exit}')
+  if [ -n "$gw" ] && ping -c2 -W3 "$gw" >/dev/null 2>&1; then
+    reset net; rm -f "$STATE/net.since"; cleared net "Network is back."; return 0
+  fi
+  local n down; n=$(fails net)
+  [ -f "$STATE/net.since" ] || date +%s > "$STATE/net.since"
+  down=$(( $(date +%s) - $(cat "$STATE/net.since") ))
+  log "network check failed ($n, down ${down}s)"
+  problem net "Network is down, trying to recover."
+  # homelab-wifi has its setup hotspot on: leave the Wi-Fi alone. Reboot only if a known Wi-Fi is in range
+  # but still won't connect after 30 min and nobody is using the setup page.
+  local mode=/run/homelab-wifi/mode.json
+  if [ -f "$mode" ]; then
+    if [ "$down" -ge 1800 ] && jq -e '.known_visible == true' "$mode" >/dev/null 2>&1 \
+       && [ $(( $(date +%s) - $(jq -r '.last_visit | floor' "$mode") )) -ge 900 ] && [ "$(cut -d. -f1 /proc/uptime)" -ge 1800 ]; then
+      log "known Wi-Fi in range but unreachable for 30 min, rebooting"; reset net; rm -f "$STATE/net.since"; systemctl reboot
+    else
+      log "Wi-Fi setup hotspot is on, waiting"
+    fi
+    return 1
+  fi
+  if [ "$n" -eq 2 ]; then
+    log "cycling Wi-Fi"; nmcli radio wifi off; sleep 3; nmcli radio wifi on
+  elif [ "$n" -eq 4 ]; then
+    log "restarting NetworkManager"; systemctl restart NetworkManager
+  elif [ "$down" -ge 1800 ] && [ "$(cut -d. -f1 /proc/uptime)" -ge 1800 ]; then
+    # 30 minutes with no network (and up for 30 min, so this can't loop at boot): reboot as a last resort.
+    log "network down 30 min, rebooting"; reset net; rm -f "$STATE/net.since"; systemctl reboot
+  fi
+  return 1
+}
+
+check_docker() {
+  if ! systemctl is-active --quiet docker; then
+    log "docker inactive, restarting"; systemctl restart docker; sleep 10
+  fi
+  # Watchtower stops containers while it swaps images; starting them then makes its update fail.
+  if docker logs --since 15m watchtower 2>&1 | grep -E 'Found new image|Update session completed' | tail -1 | grep -q 'Found new image'; then
+    log "watchtower is updating, skipping container checks"; return 0
+  fi
+  # Bring up anything in the stack that is not running (idempotent).
+  local before after
+  before=$(docker ps -q | wc -l)
+  (cd "$COMPOSE_DIR" && docker compose up -d --remove-orphans >/dev/null 2>&1)
+  after=$(docker ps -q | wc -l)
+  [ "$after" -gt "$before" ] && log "started $((after-before)) stopped container(s)"
+
+  # Restart containers stuck unhealthy.
+  local c
+  for c in $(docker ps --filter health=unhealthy --format '{{.Names}}'); do
+    if [ "$(fails "unhealthy-$c")" -ge 3 ]; then
+      log "restarting unhealthy $c"; docker restart "$c" >/dev/null
+      reset "unhealthy-$c"
+      notify "Homelab: restarted $c" "$c was unhealthy for 6 minutes, restarted it." arrows_counterclockwise 3
+    fi
+  done
+  for f in "$STATE"/unhealthy-*.count; do
+    [ -e "$f" ] || continue
+    c=${f##*/unhealthy-}; c=${c%.count}
+    docker ps --filter "name=^$c$" --filter health=unhealthy -q | grep -q . || rm -f "$f"
+  done
+}
+
+check_tailscale() {
+  systemctl is-active --quiet tailscaled || { log "tailscaled inactive, restarting"; systemctl restart tailscaled; sleep 5; }
+  local st; st=$(tailscale status --json 2>/dev/null | jq -r .BackendState)
+  if [ "$st" != "Running" ]; then
+    local n; n=$(fails tailscale)
+    log "tailscale state=$st ($n)"
+    [ "$n" -ge 2 ] && { tailscale up >/dev/null 2>&1 || systemctl restart tailscaled; }
+    [ "$st" = "NeedsLogin" ] && problem tailscale "Tailscale needs login. SSH in locally and run: tailscale up"
+    [ "$n" -ge 3 ] && problem tailscale "Tailscale is $st, trying to recover."
+    return 1
+  fi
+  reset tailscale; cleared tailscale "Tailscale is connected again."
+
+  # Re-apply any missing tailnet-only port.
+  local cfg pair ext int
+  cfg=$(tailscale serve status --json 2>/dev/null)
+  for pair in $SERVE_MAP; do
+    ext=${pair%%:*}; int=${pair##*:}
+    if ! echo "$cfg" | jq -e --arg p "$ext" '.TCP[$p]' >/dev/null 2>&1; then
+      log "re-adding tailscale serve :$ext -> $int"
+      tailscale serve --bg --http "$ext" "http://127.0.0.1:$int" >/dev/null 2>&1
+    fi
+  done
+}
+
+check_disk() {
+  local pct; pct=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+  if [ "$pct" -ge 90 ]; then problem disk "Disk is ${pct}% full."; else cleared disk "Disk is back to ${pct}%."; fi
+}
+
+if [ "$MODE" = boot ]; then
+  # Wait up to 3 min for network + tailscale, fixing as we go.
+  for i in $(seq 1 18); do
+    check_network && check_tailscale && break
+    sleep 10
+  done
+  check_docker
+  # Give containers a moment, then report.
+  sleep 45
+  check_tailscale
+  up=$(docker ps -q | wc -l); total=$(cd "$COMPOSE_DIR" && docker compose config --services | wc -l)
+  ts=$(tailscale status --json 2>/dev/null | jq -r .BackendState)
+  prev=$(journalctl -b -1 -n 200 --no-pager 2>/dev/null | grep -qE "Reached target (System Power Off|System Reboot)|reboot: Restarting|Power down" && echo "clean shutdown" || echo "unexpected shutdown (power cut or crash)")
+  msg="Containers: $up/$total running
+Tailscale: $ts
+Last shutdown: $prev"
+  if [ "$up" -ge "$total" ] && [ "$ts" = Running ]; then
+    notify "Homelab is online" "$msg" rocket 3
+  else
+    notify "Homelab is online, with issues" "$msg" warning 4
+  fi
+  log "boot complete: $up/$total containers, tailscale $ts, $prev"
+  exit 0
+fi
+
+check_network && { check_tailscale; check_docker; }
+check_disk
+exit 0

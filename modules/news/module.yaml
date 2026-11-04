@@ -1,0 +1,12 @@
+name: news
+title: "News"
+description: "Headlines by topic, short AI-written digests, and news search. Feeds the morning briefing."
+version: 0.1.0
+default: true
+requires: []
+optional: [internet, ollama]
+platforms: [linux, mac, wsl]
+settings:
+  news_at: { type: times, default: ["6:30 AM"] }
+dashboard:                       # card ids are finalised when the dashboard is split (Phase 5.3)
+  home_cards: [news]

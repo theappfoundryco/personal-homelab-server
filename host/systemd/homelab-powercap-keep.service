@@ -1,0 +1,6 @@
+[Unit]
+Description=Keep the CPU long-term power cap at 35 W (thermald can reset it)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "f=/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; [ \"$(cat $f)\" = 35000000 ] || { echo 35000000 > $f; logger -t homelab-powercap reapplied 35W cap; }"

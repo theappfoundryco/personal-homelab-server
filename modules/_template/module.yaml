@@ -1,0 +1,14 @@
+# Copy this folder to modules/<yourname>/ and change every line below. The folder name must equal `name`.
+name: _template
+title: "Hello module"            # shown in Settings
+description: "Says hello. A starting point for your own module."
+version: 0.1.0
+default: true                    # on unless the user switches it off in config.yaml under modules:
+requires: []                     # other modules this cannot work without, e.g. [notes]
+optional: []                     # things it can use if present: ollama, internet, calendar, gmail
+platforms: [linux, mac, wsl]     # remove one if the module cannot run there
+settings:                        # what users can set in config.yaml (shown in the settings page later)
+  greeting: { type: text, default: "Hello" }
+dashboard:                       # what it adds to the dashboard; users can reorder or hide these in Settings
+  home_cards: []
+  # tab: { id: pets, title: Pets, icon: paw }

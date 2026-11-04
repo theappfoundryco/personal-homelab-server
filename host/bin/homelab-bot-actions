@@ -1,0 +1,28 @@
+#!/bin/sh
+# Carries out actions the Telegram bot requests by dropping files in /var/lib/homelab-bot/requests.
+# The bot itself has no Docker or host access; only these actions are possible.
+REQ=/var/lib/homelab-bot/requests
+RES=/var/lib/homelab-bot/results
+mkdir -p "$RES"
+for f in "$REQ"/*; do
+  [ -f "$f" ] || continue
+  id=$(basename "$f"); set -- $(head -c 200 "$f"); rm -f "$f"
+  action=$1; name=$2; ok=false; msg=""
+  case "$action" in
+    restart|start)
+      if docker ps -a --format '{{.Names}}' | grep -qx "$name" && echo "$name" | grep -qE '^[a-z0-9-]+$'; then
+        if docker "$action" "$name" >/dev/null 2>&1; then ok=true; msg="$name ${action}ed"; else msg="docker $action failed"; fi
+        logger -t homelab-watchdog "bot $action $name ($ok)"
+      else msg="unknown app $name"; fi ;;
+    gitsync)  # back up to GitHub now; if the hourly run is going, this waits for it. Answers with its status file
+      systemctl start homelab-git-sync.service >/dev/null 2>&1
+      if [ -s /var/lib/homelab-stats/git-backup.json ]; then cp /var/lib/homelab-stats/git-backup.json "$RES/$id.json"; continue; fi
+      msg="no backup status" ;;
+    reboot)
+      echo '{"ok": true, "msg": "rebooting"}' > "$RES/$id.json"
+      logger -t homelab-watchdog "bot reboot requested"; sleep 3; systemctl reboot; exit 0 ;;
+    *) msg="unknown action" ;;
+  esac
+  printf '{"ok": %s, "msg": "%s"}\n' "$ok" "$msg" > "$RES/$id.json"
+done
+find "$RES" -type f -mmin +60 -delete

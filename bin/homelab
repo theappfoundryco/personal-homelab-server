@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Looks after your assistant: status, start, stop, logs, modules, backup, restore, update, uninstall. Run: homelab help
+# The name is the only thing to change if the project is renamed. It can be linked anywhere: ln -s "$PWD/bin/homelab" ~/.local/bin/homelab
+set -eu
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do  # follow links so it finds the program folder from wherever it is called
+  D="$(cd "$(dirname "$SRC")" && pwd)"; SRC="$(readlink "$SRC")"
+  case "$SRC" in /*) ;; *) SRC="$D/$SRC" ;; esac
+done
+HERE="$(cd "$(dirname "$SRC")/.." && pwd)"
+command -v python3 >/dev/null 2>&1 || { echo "  stop  Python 3 is needed. On a Mac: brew install python. On Linux: sudo apt install python3 python3-yaml"; exit 1; }
+case "${1:-}" in help|-h|--help) set -- --help ;; esac
+PYTHONPATH="$HERE" exec python3 -W ignore -m core.cli "$@"

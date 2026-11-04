@@ -1,0 +1,11 @@
+name: alerts
+title: "Quiet alerts"
+description: "Server problems, F1 and flight changes are recorded quietly and read out in the morning recap."
+version: 0.1.0
+default: true
+requires: []
+optional: [calendar]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: []

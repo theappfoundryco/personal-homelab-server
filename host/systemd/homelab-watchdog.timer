@@ -1,0 +1,10 @@
+[Unit]
+Description=Run homelab self-healing check every 2 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

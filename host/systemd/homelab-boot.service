@@ -1,0 +1,12 @@
+[Unit]
+Description=Homelab startup: bring up network, Tailscale, containers, notify phone
+After=network-online.target docker.service tailscaled.service
+Wants=network-online.target docker.service tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab-watchdog boot
+TimeoutStartSec=6min
+
+[Install]
+WantedBy=multi-user.target

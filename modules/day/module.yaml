@@ -1,0 +1,11 @@
+name: day
+title: "Your day"
+description: "What is on today and tomorrow, an evening plan with a suggested alarm, and a weekly report on Sundays."
+version: 0.1.0
+default: true
+requires: []
+optional: [calendar, weather, journal]
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: [my_day]

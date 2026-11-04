@@ -1,0 +1,113 @@
+{
+ "body": {
+  "courses": [
+   {
+    "dose_today": 3,
+    "doses": [
+     "2026-10-20",
+     "2026-10-27",
+     "2026-11-03",
+     "2026-11-10",
+     "2026-11-17",
+     "2026-11-24"
+    ],
+    "ends": "2026-11-24",
+    "id": "course1",
+    "name": "Demo weekly dose",
+    "next": "2026-11-03",
+    "start": "2026-10-20",
+    "taken": 0,
+    "weekday": 0,
+    "weeks": 6
+   }
+  ],
+  "date": "2026-11-03",
+  "health": [
+   {
+    "due": "2026-11-23",
+    "id": "appt1",
+    "name": "Demo check-up",
+    "why": "yearly"
+   }
+  ],
+  "log": {
+   "2026-10-21": {
+    "morning": false,
+    "night": false
+   },
+   "2026-10-22": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-23": {
+    "morning": false,
+    "night": true
+   },
+   "2026-10-24": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-25": {
+    "morning": true,
+    "night": false
+   },
+   "2026-10-26": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-27": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-28": {
+    "morning": true,
+    "night": false
+   },
+   "2026-10-29": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-30": {
+    "morning": true,
+    "night": true
+   },
+   "2026-10-31": {
+    "morning": true,
+    "night": false
+   },
+   "2026-11-01": {
+    "morning": true,
+    "night": false
+   },
+   "2026-11-02": {
+    "morning": true,
+    "night": true
+   },
+   "2026-11-03": {
+    "morning": true,
+    "night": true
+   }
+  },
+  "slots": [
+   {
+    "id": "morning",
+    "items": [
+     "Vitamin D",
+     "Multivitamin"
+    ],
+    "label": "Morning",
+    "when": "8:00 AM"
+   },
+   {
+    "id": "night",
+    "items": [
+     "Magnesium"
+    ],
+    "label": "Night",
+    "when": "10:00 PM"
+   }
+  ],
+  "today": "2026-11-03"
+ },
+ "status": 200
+}

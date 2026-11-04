@@ -1,0 +1,3 @@
+# paths allowed to exceed 1 MB, one per line
+stack/grafana/dashboards/node-exporter-full.json
+stack/grafana/dashboards/cadvisor.json

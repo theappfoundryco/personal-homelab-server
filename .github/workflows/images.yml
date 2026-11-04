@@ -1,0 +1,84 @@
+name: Images
+
+# Builds the "core" (assistant) and "web" (dashboard) images for amd64 and arm64, signs them with cosign (keyless) and attaches an SBOM and build provenance.
+#   main            -> :edge
+#   a release tag   -> :1.2.3, :1.2, and :stable
+#   pull requests   -> build only, nothing is pushed
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to publish, for example v1.2.3"
+        type: string
+        required: true
+  workflow_dispatch:
+  pull_request:
+    paths: ["stack/telegram/**", "stack/landing/**", "core/**", "modules/**", ".github/workflows/images.yml"]
+  push:
+    branches: [main]
+    paths: ["stack/telegram/**", "stack/landing/**", "core/**", "modules/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # keyless signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: core
+            dockerfile: stack/telegram/Dockerfile
+          - image: web
+            dockerfile: stack/landing/Dockerfile
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      PUSH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: image name in lower case
+        run: echo "NAME=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.image }}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: ${{ env.PUSH == 'true' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.NAME }}
+          tags: |
+            type=edge,branch=main
+            type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=raw,value=stable,enable=${{ inputs.tag != '' }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ env.PUSH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - uses: sigstore/cosign-installer@v3
+        if: ${{ env.PUSH == 'true' }}
+      - name: sign the image by digest
+        if: ${{ env.PUSH == 'true' }}
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${NAME}@${DIGEST}"
