@@ -34,7 +34,7 @@
 .upd-step.now i { border-color: var(--text); border-right-color: transparent; animation: upd-spin .9s linear infinite; }
 .upd-step.wait { color: var(--faint); }
 @keyframes upd-spin { to { transform: rotate(360deg); } }
-.upd-done { margin-top: var(--sp-4); padding: var(--pad-y) var(--pad-x); }
+.upd-done { margin: var(--sp-4) 0 var(--sp-3); padding: var(--pad-y) var(--pad-x); }
 .upd-dh { display: flex; align-items: center; gap: var(--sp-3); }
 .upd-ok { width: var(--ic-sm); height: var(--ic-sm); color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
 .upd-ok svg { width: var(--g-md); height: var(--g-md); }
