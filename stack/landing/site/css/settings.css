@@ -24,7 +24,7 @@
 .sfield.bad input { border-color: var(--bad); }
 .sfield .why { margin: var(--sp-1) var(--sp-1) 0; font-size: var(--t-sm); color: var(--bad); }
 .sfield .hint { margin: var(--sp-1) var(--sp-1) 0; font-size: var(--t-sm); color: var(--faint); }
-.sgroup { margin: var(--sp-6) var(--sp-1) 0; font-size: var(--t-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.sgroup { margin: var(--sp-6) var(--sp-1) var(--gap); font-size: var(--t-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .sbtn { display: block; width: 100%; height: var(--h-btn); margin-top: var(--sp-4); border-radius: var(--r-md); background: var(--raised); font-size: var(--t-base); font-weight: 600; }
 .sbtn.main { background: var(--sel); color: var(--on-sel); }
 .sbtn.danger { color: var(--bad); }
