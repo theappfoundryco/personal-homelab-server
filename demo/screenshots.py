@@ -48,6 +48,8 @@ def main():
             pg.route("https://api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(forecast())))
             pg.route("https://air-quality-api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"current": {"us_aqi": 32, "pm2_5": 7.0}})))
             pg.route("**/api/bot/capabilities", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"capabilities": [{"name": n, "title": n.title(), "ok": True} for n in HEALTHY]})))
+            pg.route("**/api/bot/server/status", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
+                {"monitoring": True, "apps": [{"id": a, "name": a, "state": "running"} for a in ("landing", "telegram-bot", "ollama", "open-webui", "grafana")]})))
             pg.goto(url + "/")
             pg.wait_for_load_state("networkidle")
             for tab, name in VIEWS:
@@ -55,7 +57,10 @@ def main():
                 pg.wait_for_load_state("networkidle")
                 pg.wait_for_timeout(400)
                 pg.evaluate("window.scrollTo(0, 0)")
+                pg.set_viewport_size({"width": viewport["width"], "height": pg.evaluate("document.documentElement.scrollHeight")})  # the whole page, so no card is cut off behind the bottom menu
+                pg.wait_for_timeout(300)
                 pg.screenshot(path=os.path.join(OUT, f"{name}-{size}.png"))
+                pg.set_viewport_size(viewport)
                 print("wrote", f"{name}-{size}.png")
             ctx.close()
         browser.close()
