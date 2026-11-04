@@ -144,6 +144,7 @@ Run `homelab help` for the rest.
 | | |
 |---|---|
 | Project page | [theappfoundry.co/homelab](https://theappfoundry.co/homelab) |
+| Live demo, with fake data | [theappfoundry.co/homelab/demo](https://theappfoundry.co/homelab/demo/) |
 | Install guide | [theappfoundry.co/homelab/install](https://theappfoundry.co/homelab/install) |
 | Questions and ideas | [Discussions](https://github.com/theappfoundryco/personal-homelab-server/discussions) and Discord [#homelab](https://discord.gg/CtxC3ADy76) |
 | Bugs and feature requests | [Issues](https://github.com/theappfoundryco/personal-homelab-server/issues/new/choose) (remove personal information first) |
