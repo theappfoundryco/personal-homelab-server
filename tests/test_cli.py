@@ -153,6 +153,24 @@ class Backups(Base):
         self.assertIn("compose stop landing telegram-bot docker-proxy", self.fake.calls)
         self.assertIn("compose up -d --build landing telegram-bot docker-proxy", self.fake.calls)
 
+    @unittest.skipUnless(shutil.which("openssl"), "openssl is not here")
+    def test_a_locked_copy_from_your_drive_restores_with_the_saved_passphrase(self):
+        from core import backups
+        if not backups.can_lock():
+            self.skipTest("this openssl cannot lock")
+        self.go("backup")
+        plain = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])
+        backups.set_passphrase(self.home, "a long passphrase")
+        locked = os.path.join(self.tmp, os.path.basename(plain) + ".enc")
+        self.assertTrue(backups.lock(plain, locked, os.path.join(self.home, backups.PASSFILE)))
+        open(os.path.join(self.data, "journal", "a.json"), "w").write('{"entry": "ruined"}')
+        self.assertEqual(self.go("restore", locked, "--yes"), 0, self.say())
+        self.assertEqual(json.load(open(os.path.join(self.data, "journal", "a.json"))), {"entry": "original"})
+        self.assertFalse([f for f in os.listdir(self.home) if f.startswith("unlocked-")])  # the unlocked file is not left behind
+        backups.set_passphrase(self.home, "the wrong one now")
+        self.assertEqual(self.go("restore", locked, "--yes"), 1)
+        self.assertIn("Could not unlock", self.say())
+
     def test_restore_asks_first_and_cancel_changes_nothing(self):
         self.go("backup")
         path = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])

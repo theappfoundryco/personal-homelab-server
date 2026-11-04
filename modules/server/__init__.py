@@ -358,6 +358,18 @@ def start_update():
     return bool(r.get("ok")), r.get("msg", "")
 
 
+BACKUP_KEYS = {"backup": bool, "backup_at": str, "backup_keep": int, "offsite_to": str, "offsite_keep": int, "alerts": bool}
+
+
+def backups_view():
+    """What Settings, Backups shows: the helper's status file, the night settings, and what this machine can do."""
+    night = (SETTINGS.merged().get("night") or {})
+    st = safe(lambda: json.load(open(f"{DATA}/backup-status.json")), {}) or {}
+    return {"ok": True, "helper": not CAPS.missing(["host_agent"]), "telegram": not CAPS.missing(["telegram"]), "status": st,
+            "night": {"backup": bool(night.get("backup")), "backup_at": night.get("backup_at") or "3:30 AM", "backup_keep": night.get("backup_keep") or 7,
+                      "offsite_to": night.get("offsite_to") or "", "offsite_keep": night.get("offsite_keep") or 7, "alerts": night.get("alerts", True) is not False}}
+
+
 def update_prefs():
     return {"telegram": True, **(safe(lambda: json.load(open(f"{DATA}/update-prefs.json")), {}) or {})}
 
@@ -510,6 +522,61 @@ def register(app):
         if not ok and msg in ("An update is already running.", "You already have the newest version."):
             return {"ok": False, "msg": msg}, 409
         return {"ok": ok, "msg": msg}
+
+    @router.get("/server/backups")
+    def server_backups(req):
+        return backups_view()
+
+    @router.post("/server/backups/now")
+    def server_backups_now(req):
+        r = host_action("backup")
+        return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/drives")  # look for plugged-in drives, then answer with the list
+    def server_backups_drives(req):
+        r = host_action("drives")
+        return {**backups_view(), "ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/settings")  # {backup, backup_at, backup_keep, offsite_to, offsite_keep, alerts}: any of them
+    def server_backups_settings(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        b = req.json() or {}
+        ch = {f"night.{k}": b[k] for k in BACKUP_KEYS if k in b}
+        if not ch or any(not isinstance(b[k], BACKUP_KEYS[k]) or isinstance(b[k], bool) != (BACKUP_KEYS[k] is bool) for k in b if k in BACKUP_KEYS):
+            return {"ok": False, "msg": "Nothing to change."}, 400
+        for k in ("backup_keep", "offsite_keep"):
+            if k in b and not 1 <= b[k] <= 60:
+                return {"ok": False, "msg": "Keep between 1 and 60."}, 400
+        if "offsite_to" in b:
+            ch["night.offsite_to"] = b["offsite_to"].strip()
+            if ch["night.offsite_to"] and not ch["night.offsite_to"].startswith(("/", "~")):
+                return {"ok": False, "msg": "Use a full folder path, like /Volumes/Backup or ~/Dropbox/homelab."}, 400
+        ok, problems = SETTINGS.set(ch)
+        if not ok:
+            return {"ok": False, "msg": " ".join(problems)}, 400
+        host_action("offsite")  # the helper checks the folder now and writes its state
+        return backups_view()
+
+    @router.post("/server/backups/passphrase")  # {passphrase}: lock the copies; "" stops locking new ones
+    def server_backups_passphrase(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        text = str((req.json() or {}).get("passphrase") or "")
+        if text and not 8 <= len(text) <= 64:
+            return {"ok": False, "msg": "Use 8 to 64 characters."}, 400
+        r = host_action("passphrase", text.encode().hex() if text else "-")
+        return {**backups_view(), "ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/restore")  # {name}: the dashboard goes away for a minute, then comes back with the backup's data
+    def server_backups_restore(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        r = host_action("restore", str((req.json() or {}).get("name") or ""))
+        return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
 
     @router.post("/server/update/prefs")  # {telegram: bool}: tell me on Telegram when a new version is out
     def server_update_prefs(req):

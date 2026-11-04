@@ -149,12 +149,21 @@ def status(c):
 def start(c):
     if not c.docker_ready():
         return 1
+    try:
+        os.remove(os.path.join(c.data, "stopped-by-you.json"))
+    except OSError:
+        pass
     return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
 
 
 def stop(c):
     if not c.docker_ready():
         return 1
+    try:  # so the host helper does not warn that the assistant is down: you stopped it
+        os.makedirs(c.data, exist_ok=True)
+        open(os.path.join(c.data, "stopped-by-you.json"), "w").write(json.dumps({"at": _time.time()}))
+    except OSError:
+        pass
     return c.compose("stop", *services(c), stream=True)[0]
 
 
@@ -611,6 +620,38 @@ def settings_sync(c, repo):
 
 
 def restore(c, path):
+    """A backup, or a locked copy (.enc) from your drive: it is unlocked with the saved passphrase, or the one you type, first."""
+    if not path.endswith(".enc"):
+        return restore_plain(c, path)
+    if not os.path.isfile(path):
+        c.out(f"  stop  There is no file at {path}.")
+        return 1
+    from core import backups
+    passfile, made = os.path.join(c.home, backups.PASSFILE), None
+    if not os.path.isfile(passfile):
+        import getpass
+        text = getpass.getpass("  Passphrase for this copy: ") if sys.stdin.isatty() else ""
+        if not text:
+            c.out("  stop  This copy is locked. Run this in a terminal to type its passphrase.")
+            return 1
+        made = os.path.join(c.home, ".restore-pass")
+        fd = os.open(made, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        passfile = made
+    plain = os.path.join(c.home, "unlocked-" + os.path.basename(path)[:-4])
+    try:
+        if not backups.unlock(path, plain, passfile):
+            c.out("  stop  Could not unlock it: the passphrase is wrong, or openssl is missing. Nothing was changed.")
+            return 1
+        return restore_plain(c, plain)
+    finally:
+        for p in (plain, made):
+            if p and os.path.exists(p):
+                os.remove(p)
+
+
+def restore_plain(c, path):
     if not os.path.isfile(path):
         c.out(f"  stop  There is no file at {path}.")
         return 1
@@ -836,7 +877,7 @@ def update(c, check=False, dry=False, channel=None):
 def agent_cmd(c, action, allow_reboot=False):
     from core import agent
     if action == "run":
-        agent.Agent(c.data, c.root, allow_reboot=allow_reboot or c.env.get("HL_AGENT_REBOOT") == "1", stats_dir=c.stats).serve()
+        agent.Agent(c.data, c.root, allow_reboot=allow_reboot or c.env.get("HL_AGENT_REBOOT") == "1", stats_dir=c.stats, home=c.home).serve()
         return 0
     if action == "install":
         return 0 if agent.install(c.root, c.home, c.platform, c.user_home, run=lambda cmd: c.run(cmd), python=c.python, allow_reboot=allow_reboot, out=c.out) else 1
