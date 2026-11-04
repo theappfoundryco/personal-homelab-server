@@ -42,6 +42,29 @@ class Schedules(unittest.TestCase):
             self.assertEqual(M.clean(bad, TUE), (None, msg))
         self.assertEqual(M.clean({**ok, "every": "week", "weekday": 2, "times": ["09:00", "18:00"]}, TUE)[0]["times"], ["09:00"])  # one time unless every day
 
+    def test_the_pill_count_says_when_it_runs_out(self):
+        m = {"id": "a", "name": "A", "every": "day", "times": ["08:00", "20:00"], "start": "2026-11-01", "left": 5, "per": 1}
+        self.assertEqual(M.runs_out(m, TUE), date(2026, 11, 5))  # 2 a day: Tue, Wed, then one on Thu
+        self.assertEqual(M.runs_out(m, TUE, {"a@0800"}), date(2026, 11, 6))  # this morning's is already counted off
+        self.assertIsNone(M.runs_out({**m, "left": None}, TUE))  # not counted
+        self.assertEqual(M.runs_out({**m, "left": 0}, TUE), TUE)  # already out
+        self.assertEqual(M.clean({"name": "A", "every": "day", "times": ["08:00"], "left": -2}, TUE), (None, "Pills left must be a number from 0 to 9999."))
+
+    def test_a_month_counts_due_and_taken_doses_per_day(self):
+        m = {"id": "a", "name": "A", "every": "week", "weekday": 1, "times": ["08:00"], "start": "2026-11-01"}  # Tuesdays
+        days = {x["date"]: x for x in M.month([m], {"2026-11-03": {"a@0800": True}}, 2026, 11, TUE)}
+        self.assertEqual(len(days), 30)
+        self.assertEqual((days["2026-11-03"]["due"], days["2026-11-03"]["taken"]), (1, 1))
+        self.assertEqual((days["2026-11-10"]["due"], days["2026-11-10"]["future"]), (1, True))
+        self.assertEqual(days["2026-11-04"]["due"], 0)
+
+    def test_quiet_hours_work_across_midnight(self):
+        from datetime import datetime
+        q = {"on": True, "from": "22:30", "to": "07:00"}
+        self.assertEqual([M.quiet(q, datetime(2026, 11, 3, h, mi)) for h, mi in ((22, 29), (22, 30), (3, 0), (7, 0), (12, 0))], [False, True, True, False, False])
+        self.assertFalse(M.quiet({**q, "on": False}, datetime(2026, 11, 3, 23, 0)))
+        self.assertTrue(M.quiet({"on": True, "from": "13:00", "to": "14:00"}, datetime(2026, 11, 3, 13, 30)))
+
     def test_the_old_slots_and_courses_become_medicines_with_their_ticks(self):
         old = {"slots": [{"id": "morning", "label": "Morning", "when": "8:00 AM", "items": ["Vitamin D", "Iron"]}, {"id": "night", "label": "Night", "items": ["Magnesium"]}],
                "courses": [{"id": "c1", "name": "B12", "weekday": 0, "start": "2026-10-19", "weeks": 6}], "health": [],
@@ -133,6 +156,38 @@ class Api(unittest.TestCase):
         self.m.check_meds()
         self.assertEqual(len(self.sent), 2)  # ticked: no more reminders
         self.assertIn("ticked", self.m.med_tick("z2", d))  # an old button with no time still works
+
+    def test_ticking_counts_pills_off_and_a_refill_nudge_comes_once(self):
+        self.patch(telegram_on=lambda: True)
+        d = self.m.meds_day().isoformat()
+        self.m.sg["meds"] = [{"id": "p1", "name": "Iron", "dose": "", "every": "day", "times": ["08:00"], "start": "2026-11-01", "remind": False, "left": 3, "per": 1}]
+        self.post("/sg/tick", {"date": d, "id": "p1@0800", "done": True})
+        self.assertEqual(self.m.sg["meds"][0]["left"], 2)
+        self.post("/sg/tick", {"date": d, "id": "p1@0800", "done": True})
+        self.assertEqual(self.m.sg["meds"][0]["left"], 2)  # ticking twice takes them once
+        out = self.post("/sg/tick", {"date": d, "id": "p1@0800", "done": False})[1]
+        self.assertEqual(self.m.sg["meds"][0]["left"], 3)  # an untick puts them back
+        self.assertTrue(out["meds"][0]["runs_out"])
+        self.m.check_sg(); self.m.check_sg()
+        nudges = [t for t, _ in self.sent if "refill" in t.lower()]
+        self.assertEqual(len(nudges), 1)
+        self.assertIn("3 left", nudges[0])
+
+    def test_quiet_hours_are_saved_and_send_reminders_without_a_sound(self):
+        self.assertEqual(self.post("/sg/quiet", {"on": True, "from": "09:00", "to": "09:00"})[0], 400)
+        hm = f"{self.m.now() - timedelta(minutes=10):%H:%M}"
+        q = {"on": True, "from": f"{self.m.now() - timedelta(hours=1):%H:%M}", "to": f"{self.m.now() + timedelta(hours=1):%H:%M}"}
+        self.assertTrue(self.post("/sg/quiet", q)[1]["quiet"]["on"])
+        flags = []
+        self.patch(telegram_on=lambda: True, send=lambda text, buttons=None, silent=False, **kw: flags.append(silent))
+        self.m.sg["meds"] = [{"id": "q1", "name": "Zinc", "dose": "", "every": "day", "times": [hm], "start": "2026-11-01", "remind": True}]
+        self.m.check_meds()
+        self.assertEqual(flags, [True])
+
+    def test_the_month_calendar_route(self):
+        code, out = harness.call(self.base, "GET", "/sg/month?m=2026-11")
+        self.assertEqual((code, out["month"], len(out["days"])), (200, "2026-11", 30))
+        self.assertEqual(harness.call(self.base, "GET", "/sg/month?m=2026-13")[0], 400)
 
     def test_typing_that_you_took_one_ticks_it(self):
         t = self.m.now() - timedelta(minutes=30)

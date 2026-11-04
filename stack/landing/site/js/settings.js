@@ -13,7 +13,7 @@ const SET_LABELS = { 'owner.name': 'Your name', timezone: 'Timezone', 'home.city
   'models.claude_news': 'Claude news model', 'features.therapy_recap': 'Weekly journal summary', 'support.therapist': 'Therapist name', 'support.helpline_name': 'Helpline name',
   'support.helpline_tel': 'Helpline number', 'therapy.calendar_words': 'Words that mark a therapy session in your calendar', 'ollama.url': 'Where the AI engine runs' };
 const SET_KEYS = { flag: 'Flag (an emoji)', label: 'City name', tz: 'Time zone, like Europe/London' };
-const HOME_CARDS = [['weather', 'Weather'], ['brief', 'Briefing button'], ['shortcuts', 'News and Planner buttons'], ['today', 'Your day'], ['clocks', 'World clock']];
+const HOME_CARDS = [['weather', 'Weather'], ['brief', 'Briefing button'], ['shortcuts', 'News and Planner buttons'], ['meds', 'Next medicine'], ['today', 'Your day'], ['clocks', 'World clock']];
 const TAB_NAMES = { home: 'Home', journal: 'Journal', gym: 'Gym', sg: 'Health', server: 'Server and apps' };
 
 async function setApi(path, body) {

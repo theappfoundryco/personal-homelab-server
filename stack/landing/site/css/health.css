@@ -68,3 +68,35 @@
 .sg-swrow small { display: block; color: var(--muted); font-size: var(--t-sm); }
 #sgs .sheet-body { padding-bottom: var(--sp-4); }
 #sgs .sg-go { margin-top: var(--sp-4); background: var(--sel); color: var(--on-sel); }
+/* Medicines v2: pill count, the month calendar, quiet hours, and the next medicine on Home */
+.sg-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); }
+.sg-row .t small.soon { color: var(--warn); }
+.sg-mnav { width: var(--ib-sm); height: var(--ib-sm); border-radius: 50%; color: var(--muted); font-size: var(--t-xl); text-transform: none; }
+.sg-cal { padding: var(--pad-y) var(--pad-x); }
+.sg-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--sp-1); }
+.sg-wd { padding-bottom: var(--sp-1); color: var(--faint); font-size: var(--t-xs); font-style: normal; font-weight: 600; text-align: center; }
+.sg-dd { aspect-ratio: 1; border-radius: var(--r-sm); font-size: var(--t-sm); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sg-dd.none, .sg-dd.later { color: var(--faint); }
+.sg-dd.all { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+.sg-dd.some { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.sg-dd.missed { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.sg-dd.today { box-shadow: inset 0 0 0 calc(2 * var(--hair)) var(--text); }
+.sg-dd.pick { outline: calc(2 * var(--hair)) solid var(--auto); outline-offset: var(--hair); }
+.sg-key { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-3); color: var(--muted); font-size: var(--t-xs); }
+.sg-key span { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.sg-key i { width: var(--sp-3); height: var(--sp-3); border-radius: var(--r-xs); }
+.sg-key i.all { background: color-mix(in srgb, var(--good) 40%, transparent); }
+.sg-key i.some { background: color-mix(in srgb, var(--warn) 40%, transparent); }
+.sg-key i.missed { background: color-mix(in srgb, var(--bad) 30%, transparent); }
+.sg-dayl { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: var(--hair) solid var(--line); font-size: var(--t-base); }
+.sg-dayl > div { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-1) 0; }
+.sg-dayl span { flex: none; width: calc(var(--ib) + var(--sp-5)); color: var(--muted); font-size: var(--t-sm); }
+.sg-dayl em { margin-left: auto; color: var(--faint); font-size: var(--t-sm); font-style: normal; }
+.sg-dayl em.ok { color: var(--good); }
+.hm-dose { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); padding: var(--sp-3) var(--pad-x); }
+.hm-dose .t { flex: 1; min-width: 0; }
+.hm-dose small { display: block; color: var(--muted); font-size: var(--t-sm); }
+.hm-dose b { display: block; font-size: var(--t-lg); font-weight: 650; }
+.hm-ic { flex: none; width: var(--ic-sm); height: var(--ic-sm); display: grid; place-items: center; border-radius: var(--r-sm); background: var(--raised); color: var(--muted); }
+.hm-ic svg { width: var(--g-md); height: var(--g-md); }
+.hm-ic.ok { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
