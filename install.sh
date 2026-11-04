@@ -143,7 +143,7 @@ banner() { # the name in big letters, only for a person at a terminal wide enoug
   [ -t 1 ] && [ -n "$B" ] || return 0
   [ -n "${HL_NO_CLEAR:-}" ] || printf '\033[H\033[2J'  # clears the screen but keeps scrollback, so earlier output is one scroll away
   [ "${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}" -ge 66 ] 2>/dev/null || return 0
-  local shades=(152 152 146 146 182 182) i=0 ver line  # soft sea green to violet, easy on the eyes
+  local shades=(223 217 216 210 204 168) i=0 ver line  # warm sand to rose, easy on the eyes
   [ "$(tput colors 2>/dev/null || echo 8)" -ge 256 ] 2>/dev/null || shades=(36 36 36 36 36 36)
   printf '\n'
   while IFS= read -r line; do
@@ -210,6 +210,10 @@ link_plugins() { # Docker finds its plugins in ~/.docker/cli-plugins
   return 0
 }
 start_docker_mac() { # starts whichever Docker this Mac has, from the terminal
+  if ! command -v orbctl >/dev/null 2>&1 && ! command -v colima >/dev/null 2>&1 && [ ! -d /Applications/Docker.app ]; then  # a leftover docker command with nothing behind it would otherwise wait in silence
+    say "        There is a Docker command, but nothing to run it (no Docker Desktop, OrbStack or Colima). Installing Colima, a light one with no app to open."
+    install_docker_mac || return 1
+  fi
   if command -v orbctl >/dev/null 2>&1; then step "Starting Docker" "Docker started" orbctl start
   elif command -v colima >/dev/null 2>&1; then
     mem=$(( $(mac_memory_gb) / 2 )); [ "$mem" -gt 6 ] && mem=6; [ "$mem" -lt 2 ] && mem=2
