@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="css/shell.css">
 <link rel="stylesheet" href="css/health.css">
 <link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/update.css">
 <link rel="stylesheet" href="css/weather.css">
 <link rel="stylesheet" href="css/settings.css">
 <link rel="stylesheet" href="css/wizard.css">
@@ -297,6 +298,16 @@
   </div>
 </div>
 
+<!-- A new version: what it brings, and Update now -->
+<div class="sheet-wrap" id="upd" hidden>
+  <div class="sheet-bg"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="upd-title">
+    <div class="grab"></div>
+    <div class="sheet-head"><h2 id="upd-title">Update available</h2></div>
+    <div class="sheet-body" id="upd-body"></div>
+  </div>
+</div>
+
 <!-- Your own mood score for a day -->
 <div class="sheet-wrap" id="jms" hidden>
   <div class="sheet-bg" data-jms-no></div>
@@ -323,6 +334,7 @@
 <script src="js/planner.js"></script>
 <script src="js/apps.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/update.js"></script>
 <script src="js/wizard.js"></script>
 <script src="js/loader.js"></script>
 </body>
