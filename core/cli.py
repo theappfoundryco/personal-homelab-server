@@ -916,8 +916,9 @@ def uninstall(c, purge=False):
     for line in keep:
         c.out(f"    - {line}")
     if purge:
-        word = os.path.basename(c.home.rstrip(os.sep)) or "data"
-        if c.prompt(f"  Type {word} to confirm: ").strip() != word:
+        folder = os.path.basename(c.home.rstrip(os.sep)) or "data"
+        word = folder.lstrip(".") or folder  # ".homelab" reads like punctuation next to "to confirm", so ask for "homelab" and take both
+        if c.prompt(f"  This cannot be undone. To go ahead, type the word {word} and press Enter: ").strip() not in (word, folder):
             c.out("  Cancelled. Nothing was changed.")
             return 1
     elif not c.ask("Remove these?"):
