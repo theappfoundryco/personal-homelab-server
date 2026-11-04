@@ -35,8 +35,8 @@ POST_STEPS = [
     ("POST", "/journal/save", {"text": "Too early", "date": "2999-01-01"}),
     ("POST", "/capture/peek", {"text": "remind me to call Sam tomorrow at 5 pm"}),
     ("POST", "/capture/peek", {"text": "note: ideas for the weekend"}),
-    ("POST", "/sg/tick", {"date": "2026-11-03", "id": "morning", "done": True}),
-    ("POST", "/sg/tick", {"date": "2999-01-01", "id": "morning", "done": True}),
+    ("POST", "/sg/tick", {"date": "2026-11-03", "id": "m1@0800", "done": True}),
+    ("POST", "/sg/tick", {"date": "2999-01-01", "id": "m1@0800", "done": True}),
     ("POST", "/sg/health", {"id": "appt1", "due": "2026-12-01"}),
     ("POST", "/nope", {}),
 ]

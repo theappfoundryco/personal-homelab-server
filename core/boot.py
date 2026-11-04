@@ -228,7 +228,7 @@ from modules.journal import CLAUDE_KEY, JOURNAL_MODEL, LETTERS_FILE, RECAP_SHOW,
 
 
 # ================================================================ health (moved to modules/health/)
-from modules.health import BARE_DONE, bare_done, check_meds, check_sg, med_tick, nudged, sg, sg_api, sg_save, sg_view, typed_meds
+from modules.health import BARE_DONE, bare_done, check_meds, check_sg, med_snooze, med_tick, nudged, sg, sg_api, sg_save, sg_view, typed_meds
 
 
 # ================================================================ small API for the landing page

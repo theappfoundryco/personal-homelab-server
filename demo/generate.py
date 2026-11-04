@@ -109,12 +109,16 @@ def build(out, today, seed=42):
                                 "journal": {"in": r.randint(1000, 4000), "out": r.randint(200, 900), "calls": r.randint(1, 4)}}
     dump(f"{out}/ai-usage.json", usage)
 
-    # health: invented medication slots, a weekly course and one appointment
-    slots = [{"id": "morning", "label": "Morning", "when": "8:00 AM", "items": ["Vitamin D", "Multivitamin"]},
-             {"id": "night", "label": "Night", "when": "10:00 PM", "items": ["Magnesium"]}]
-    log = {d.isoformat(): {"morning": r.random() < 0.8, "night": r.random() < 0.6} for d in days[-14:]}
-    dump(f"{out}/sg.json", {"slots": slots, "log": log,
-                            "courses": [{"id": "course1", "name": "Demo weekly dose", "weekday": 0, "start": (today - timedelta(days=14)).isoformat(), "weeks": 6}],
+    # health: invented medicines on each kind of schedule, and one appointment
+    start = (today - timedelta(days=14)).isoformat()
+    meds = [{"id": "m1", "name": "Vitamin D", "dose": "1 tablet", "every": "day", "times": ["08:00"], "start": start, "remind": True},
+            {"id": "m2", "name": "Iron", "dose": "1 tablet, after lunch", "every": "day", "times": ["14:00"], "start": start, "remind": False},
+            {"id": "m3", "name": "Magnesium", "dose": "2 capsules", "every": "day", "times": ["22:00"], "start": start, "remind": True},
+            {"id": "m4", "name": "Demo weekly dose", "dose": "", "every": "week", "weekday": 0, "times": ["09:00"], "start": start, "stop_after": 6, "remind": True},
+            {"id": "m5", "name": "Demo shot", "dose": "", "every": "2weeks", "times": ["10:00"], "start": (today + timedelta(days=6)).isoformat(), "remind": False},
+            {"id": "m6", "name": "Demo monthly dose", "dose": "1 sachet", "every": "month", "monthday": 5, "times": ["09:00"], "start": start, "remind": False}]
+    log = {d.isoformat(): {"m1@0800": r.random() < 0.8, "m3@2200": r.random() < 0.6} for d in days[-14:]}
+    dump(f"{out}/sg.json", {"meds": meds, "log": log,
                             "health": [{"id": "appt1", "name": "Demo check-up", "due": (today + timedelta(days=20)).isoformat(), "why": "yearly"}]})
     dump(f"{out}/planner-past.json", {})
     return out
