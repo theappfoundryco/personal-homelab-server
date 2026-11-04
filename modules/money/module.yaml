@@ -1,0 +1,12 @@
+name: money
+title: "Money"
+description: "Your monthly income and bills, and what you can spend today. Amounts stay hidden until you show them."
+version: 0.1.0
+default: true
+requires: []
+optional: []
+platforms: [linux, mac, wsl]
+settings: {}
+dashboard:
+  home_cards: []
+  web: [view.js]  # lives in your-name tab, next to Health

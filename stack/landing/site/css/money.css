@@ -1,0 +1,31 @@
+/* Money: the Health | Money switch, the first-time steps, today's budget, and amounts that stay hidden until shown */
+.mn-seg { display: flex; margin: var(--sp-3) 0 0; }
+.mn-seg button { flex: 1; }
+.mn-steps { display: flex; gap: var(--sp-1); margin: 0 var(--sp-1) var(--gap); }
+.mn-steps i { flex: 1; height: var(--sp-1); border-radius: var(--r-full); background: var(--raised); }
+.mn-steps i.on { background: var(--text); }
+.mn-intro { padding: var(--pad-y) var(--pad-x); }
+.mn-intro b { display: block; font-size: var(--t-lg); font-weight: 650; }
+.mn-intro small { display: block; margin-top: var(--sp-1); color: var(--muted); font-size: var(--t-sm); line-height: 1.45; }
+.mn-cur { width: 100%; text-align: left; }
+.mn-cur.on b { color: var(--text); }
+.mn-chk { flex: none; width: var(--g-xl); height: var(--g-xl); display: grid; place-items: center; border-radius: 50%; background: var(--sel); color: var(--on-sel); font-size: var(--t-xs); font-style: normal; font-weight: 800; }
+.mn-amt { flex: none; margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.mn-hero { padding: var(--pad-y) var(--pad-x); }
+.mn-hero > small { display: block; color: var(--muted); font-size: var(--t-sm); line-height: 1.45; }
+.mn-hero > p { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--t-base); }
+.mn-hh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.mn-hh small { color: var(--muted); font-size: var(--t-sm); }
+.mn-big { display: block; margin: var(--sp-2) 0 var(--sp-1); font-size: calc(var(--t-stat) * 1.6); font-weight: 750; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
+.mn-hero.over .mn-big, .mn-hero.over .mn-hh small { color: var(--bad); }
+.mn-hero .sbtn { margin-top: var(--sp-4); }
+.mn-eye { display: inline-flex; align-items: center; gap: var(--sp-1); height: var(--h-btn-sm); padding: 0 var(--sp-3); border-radius: var(--r-full); background: var(--raised); color: var(--text); font-size: var(--t-sm); font-weight: 600; }
+.mn-eye svg { width: var(--g-sm); height: var(--g-sm); }
+.mn-ain { display: flex; align-items: center; gap: var(--sp-2); height: var(--h-btn); padding: 0 var(--sp-4); border-radius: var(--r-md); background: var(--raised); }
+.mn-ain span { color: var(--muted); font-size: var(--t-lg); }
+.sg-f .mn-ain input { flex: 1; min-width: 0; height: auto; padding: 0; background: transparent; }
+.mn-link { color: var(--text); font-size: inherit; font-weight: 600; text-decoration: underline; }
+.mn-foot { margin-bottom: var(--sp-6); }
+.srow > span.mn-amt { flex: none; margin-left: auto; text-align: right; }  /* a settings row's spans grow; an amount must not */
+#money-body button.srow { width: 100%; text-align: left; }
+.mn-hero { margin-top: var(--sp-4); }
