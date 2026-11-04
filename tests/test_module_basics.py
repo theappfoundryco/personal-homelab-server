@@ -408,7 +408,7 @@ class Basics(unittest.TestCase):
         self.assertIsNotNone(r.find("GET", "/sg"))
         self.assertIsNotNone(r.find("POST", "/sg/tick"))
         self.assertIs(self.bot.sg, m.sg)
-        self.assertEqual(set(m.SG_SEED), {"slots", "courses", "health", "log"})  # a fresh install starts empty
+        self.assertEqual(set(m.SG_SEED), {"meds", "health", "log"})  # a fresh install starts empty
 
     def test_python_dash_m_core_finds_the_app(self):
         import core.__main__  # noqa: F401  (importing it must not start anything)

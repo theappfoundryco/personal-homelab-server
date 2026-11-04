@@ -39,7 +39,7 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **Home** | A greeting, the weather, your day and tomorrow, a world clock, and **Brief me**: a short morning briefing with weather, your calendar, the news and a server recap. |
 | **Journal** | Write your day. Optionally get a private nightly summary, a mood score, a weekly recap and deeper insights, written by a model on your own machine. |
 | **Gym** | Log workouts, see your weekly streak, personal records, body weight and progress charts. |
-| **Health** | Medicine times, weekly courses and appointments that you add yourself. A tick-list for remembering, never medical advice. |
+| **Health** | Add your medicines on your own schedule (every day at set times, every week, every 2 weeks or every month) and your appointments, then tick them off. Optional Telegram reminders with Done, 5 min and 15 min. The tab shows your first name. A tick-list for remembering, never medical advice. |
 | **Planner and notes** | Notes, one-off or repeating reminders, and long-term goals, in plain words. |
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
