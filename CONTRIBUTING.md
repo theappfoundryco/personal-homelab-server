@@ -38,7 +38,7 @@ To try the installer from scratch as often as you like, use `scripts/dev-reset.s
 
 ## Commits and pull requests
 - One task per branch, kept small.
-- Commit messages and PR titles start with a prefix: `feat:` for something new, `fix:` for a bug, and `docs:`, `refactor:`, `test:`, `ci:` or `chore:` for the rest. Then a short sentence in the imperative, for example `feat: add a name step to the wizard`. Version numbers and release notes are built from these.
+- Commit messages and PR titles start with a prefix: `feat:` for something new, `fix:` for a bug, and `docs:`, `refactor:`, `test:`, `ci:` or `chore:` for the rest. Then a short sentence in the imperative, for example `feat: add a name step to the wizard`. The maintainer writes release notes from these, so a clear prefix and sentence help.
 - Do not add `Co-Authored-By` lines or tool attribution to commits or PR descriptions.
 - Fill in the pull request template. Say what you could not test (another OS, real hardware). That is as useful as what you did.
 - Anything that changes how the wizard, dashboard or `install.sh` looks or behaves should come with a short plan or a screenshot (demo data only) first.

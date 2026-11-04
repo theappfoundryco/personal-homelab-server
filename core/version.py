@@ -1,2 +1,2 @@
-"""The release this copy is. release-please bumps the line below on every release."""
+"""The release this copy is. Change the line below, and the manifest, in the pull request that precedes a release tag (docs/HANDOFF.md, Cut a release)."""
 VERSION = "0.1.0"  # x-release-please-version
