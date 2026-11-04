@@ -47,7 +47,8 @@
 .upd-chips .upd-pill { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); font-size: var(--t-sm); }
 .upd-see { margin-top: var(--sp-3); height: var(--h-btn-sm); padding: 0 var(--sp-4); border-radius: var(--r-sm); background: var(--raised); font-size: var(--t-md); font-weight: 600; }
 /* Settings, Updates: past releases */
-.upd-rel { margin-top: var(--gap); padding: var(--sp-3) var(--pad-x) var(--sp-1); }
+.upd-rel { padding: var(--sp-3) var(--pad-x) var(--sp-1); }
+.upd-rel + .upd-rel { margin-top: var(--gap); }
 .upd-rel h3 { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--t-lg); font-weight: 650; }
 .upd-rel h3 small { color: var(--muted); font-size: var(--t-sm); font-weight: 500; }
 .upd-rel h3 a { margin-left: auto; color: var(--muted); font-size: var(--t-sm); font-weight: 500; text-decoration: none; }
