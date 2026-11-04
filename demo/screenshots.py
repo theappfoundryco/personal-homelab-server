@@ -2,6 +2,7 @@
   pip install playwright pyyaml && playwright install chromium
   python3 demo/screenshots.py            writes docs/screenshots/*.png
 Review the pictures before you commit them: they must show demo data only."""
+import json
 import os
 import sys
 
@@ -11,8 +12,6 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "e2e"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 import server  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
-
-import json  # noqa: E402
 
 OUT = os.environ.get("SHOTS_OUT") or os.path.join(ROOT, "docs", "screenshots")
 VIEWS = [("home", "home"), ("journal", "journal"), ("gym", "gym"), ("sg", "health")]
@@ -35,28 +34,38 @@ def forecast():
                   "uv_index_max": [3.2, 3.0, 2.0, 3.1, 3.4, 3.5, 3.2, 3.0, 3.1, 3.4]}}
 
 
+def open_page(browser, url, viewport, scale):
+    """A page on the demo dashboard with the internet blocked and the few outside answers made up (weather, health, server status)."""
+    ctx = browser.new_context(viewport=viewport, device_scale_factor=scale, reduced_motion="reduce", timezone_id="UTC", locale="en-US", color_scheme="dark")
+    pg = ctx.new_page()
+    pg.clock.set_fixed_time("2026-11-03T10:00:00Z")  # the same moment the demo API thinks it is
+    pg.route("**/*", lambda r: r.continue_() if r.request.url.startswith(url) else r.abort())  # fonts, maps and the internet stay out
+    pg.route("https://api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(forecast())))
+    pg.route("https://air-quality-api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"current": {"us_aqi": 32, "pm2_5": 7.0}})))
+    pg.route("**/api/bot/capabilities", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"capabilities": [{"name": n, "title": n.title(), "ok": True} for n in HEALTHY]})))
+    pg.route("**/api/bot/server/status", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
+        {"monitoring": True, "apps": [{"id": a, "name": a, "state": "running"} for a in ("landing", "telegram-bot", "ollama", "open-webui", "grafana")]})))
+    pg.goto(url + "/")
+    pg.wait_for_load_state("networkidle")
+    return ctx, pg
+
+
+def show(pg, tab):
+    pg.click(f'.tab[data-tab="{tab}"]')
+    pg.wait_for_load_state("networkidle")
+    pg.wait_for_timeout(400)
+    pg.evaluate("window.scrollTo(0, 0)")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     srv, url = server.start()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for size, (viewport, scale) in SIZES.items():
-            ctx = browser.new_context(viewport=viewport, device_scale_factor=scale, reduced_motion="reduce", timezone_id="UTC", locale="en-US", color_scheme="dark")
-            pg = ctx.new_page()
-            pg.clock.set_fixed_time("2026-11-03T10:00:00Z")  # the same moment the demo API thinks it is
-            pg.route("**/*", lambda r: r.continue_() if r.request.url.startswith(url) else r.abort())  # fonts, maps and the internet stay out
-            pg.route("https://api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(forecast())))
-            pg.route("https://air-quality-api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"current": {"us_aqi": 32, "pm2_5": 7.0}})))
-            pg.route("**/api/bot/capabilities", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"capabilities": [{"name": n, "title": n.title(), "ok": True} for n in HEALTHY]})))
-            pg.route("**/api/bot/server/status", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
-                {"monitoring": True, "apps": [{"id": a, "name": a, "state": "running"} for a in ("landing", "telegram-bot", "ollama", "open-webui", "grafana")]})))
-            pg.goto(url + "/")
-            pg.wait_for_load_state("networkidle")
+            ctx, pg = open_page(browser, url, viewport, scale)
             for tab, name in VIEWS:
-                pg.click(f'.tab[data-tab="{tab}"]')
-                pg.wait_for_load_state("networkidle")
-                pg.wait_for_timeout(400)
-                pg.evaluate("window.scrollTo(0, 0)")
+                show(pg, tab)
                 pg.set_viewport_size({"width": viewport["width"], "height": pg.evaluate("document.documentElement.scrollHeight")})  # the whole page, so no card is cut off behind the bottom menu
                 pg.wait_for_timeout(300)
                 pg.screenshot(path=os.path.join(OUT, f"{name}-{size}.png"))
