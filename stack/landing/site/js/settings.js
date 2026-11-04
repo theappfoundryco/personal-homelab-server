@@ -4,7 +4,7 @@
 const SET = { data: null, page: 'root', pin: '', note: '', restart: false };
 try { SET.pin = sessionStorage.getItem('spin') || ''; } catch (e) {}
 const setHome = () => $('#set-body');
-const SET_TITLES = { profile: 'You', about: 'About', root: 'Settings', modules: 'Modules', layout: 'Menu and home', tiles: 'Your tiles', all: 'All settings', security: 'Security', health: 'Health check', apps: 'Apps', news: 'News and briefing', schedule: 'Schedule' };
+const SET_TITLES = { profile: 'You', about: 'About', root: 'Settings', modules: 'Modules', layout: 'Menu and home', tiles: 'Your tiles', all: 'All settings', security: 'Security', health: 'Health check', apps: 'Apps', news: 'News and briefing', schedule: 'Schedule', update: 'Updates' };
 const SET_GROUPS = { owner: 'You', timezone: 'Time', home: 'Home', dashboard_url: 'Links', world_clock: 'World clock', schedule: 'Schedule', models: 'AI models',
   features: 'Features', support: 'Support', therapy: 'Journal', ollama: 'AI engine' };
 const SET_LABELS = { 'owner.name': 'Your name', timezone: 'Timezone', 'home.city': 'Home city', 'home.country': 'Country', 'home.lat': 'Latitude', 'home.lon': 'Longitude',
@@ -59,6 +59,7 @@ async function setRender() {
   else if (SET.page === 'all') setAllPage(body, note);
   else if (SET.page === 'health') await setHealthPage(body);
   else if (SET.page === 'apps') await setAppsPage(body);
+  else if (SET.page === 'update') await setUpdatePage(body);
   else if (SET.page === 'news') await setNewsPage(body, note);
   else if (SET.page === 'schedule') await setSchedPage(body, note);
   else if (SET.page === 'security') {
@@ -72,7 +73,7 @@ async function setRender() {
 // ---------- The first page: four groups, each row saying how it is set right now ----------
 const SITE = 'https://theappfoundry.co/homelab';
 async function setRootPage(body, d, note) {
-  const [st, cat, sch, nw, acc] = await Promise.all(['/setup', '/server/catalog', '/schedule', '/news/setup', '/setup/access'].map((p) => setApi(p).catch(() => ({}))));
+  const [st, cat, sch, nw, acc, upd] = await Promise.all(['/setup', '/server/catalog', '/schedule', '/news/setup', '/setup/access', '/server/update'].map((p) => setApi(p).catch(() => ({}))));
   if (SET.page !== 'root') return;
   SET.setup = st.ok ? st : null;
   const f = (p) => (d.fields.find((x) => x.path === p) || {}).value;
@@ -92,7 +93,7 @@ async function setRootPage(body, d, note) {
     + group('Apps and AI', [row('apps', 'Apps', cat.ok ? (added.length ? `${added.length} added: ${added.slice(0, 3).map((a) => a.title.split(' (')[0]).join(', ')}${added.length > 3 ? '\u2026' : ''}` : 'Nothing extra yet') : 'Add or remove apps'),
       row('', 'AI engine', engine, 'data-wiz-step="ai"'), row('', 'Telegram', st.ok ? (st.telegram.connected ? 'Connected' : 'Not connected') : 'Chat from your phone', 'data-wiz-step="telegram"')])
     + group('System', [row('', 'Who can open the dashboard', access, 'data-wiz-step="access"'), row('health', 'Health check', 'What works and what to fix'), row('all', 'All settings', 'Every value, for fine-tuning'),
-      row('', 'Run setup again', 'The guided steps from the start', 'data-wiz'), row('about', 'About', st.version ? 'Version ' + st.version : 'Version, privacy and terms')])
+      row('update', 'Updates', upd.ok ? (upd.state === 'updating' ? 'Updating now' : upd.available ? `Version ${upd.latest} is ready` : `Up to date, version ${upd.version}`) : 'Check for a newer version'), row('', 'Run setup again', 'The guided steps from the start', 'data-wiz'), row('about', 'About', st.version ? 'Version ' + st.version : 'Version, privacy and terms')])
     + `<button class="sbtn danger" id="set-reset">Reset everything to defaults</button>`;
 }
 function setProfilePage(body, note) {
@@ -114,6 +115,37 @@ function setAboutPage(body) {
     ${HL_CLI.startsWith('bin/') ? `<div class="snote">Run these in the project folder. To type just <b>homelab</b> from any folder:${cmdHTML(hlCmd('path add'))}</div>` : ''}
     <section class="card srows">${link('', 'Website', 'theappfoundry.co/homelab')}${link('/privacy', 'Privacy', 'What stays on this machine, and what does not')}${link('/terms', 'Terms', 'The terms for using Homelab')}</section>
     <p class="sfoot">\u00a9 ${new Date().getFullYear()} TheAppFoundryCo</p>`;
+}
+// ---------- Updates: the newest release, and one button that runs the same safe update as the terminal ----------
+let updPoll = null;
+async function setUpdatePage(body) {
+  clearTimeout(updPoll); updPoll = null;
+  const r = await setApi('/server/update' + (SET.updFresh ? '?fresh=1' : ''));
+  SET.updFresh = false;
+  if (SET.page !== 'update') return;
+  if (SET.updFrom && r.ok && r.version !== SET.updFrom) { location.reload(); return; }  // the new version is answering
+  if (r.ok && r.state === 'updating' && !SET.updFrom) SET.updFrom = r.version;  // opened while one is running
+  const busy = r.state === 'updating' || (SET.updFrom && !r.ok);  // while it restarts nothing answers for a moment, which is expected
+  const log = r.ok && r.log && r.log.length ? `<div class="snote">${r.log.map(esc).join('<br>')}</div>` : '';
+  const news = r.ok && /^https:\/\/github\.com\//.test(r.url || '') ? `<a class="srow sgo" href="${esc(r.url)}" target="_blank" rel="noopener"><span><b>What\u2019s new</b><small>Release notes for ${esc(r.latest)}</small></span><span class="chev">${CHEV}</span></a>` : '';
+  let head, act = '';
+  if (busy) head = ['warn', `Updating${r.to ? ' to ' + esc(r.to) : ''}\u2026`, 'Backing up, then rebuilding. This page reloads when it is done. If something fails, it goes back by itself.'];
+  else if (!r.ok) head = ['off', 'Can\u2019t check right now', 'The assistant is not answering. Check that it is running, then try again.'];
+  else if (r.state === 'failed') head = ['bad', 'The update did not finish', 'Nothing was lost. Your data and settings are as they were.'], act = `<button class="sbtn main" data-upd="go">Try again</button>`;
+  else if (r.available) head = ['warn', `Version ${esc(r.latest)} is ready`, `You have ${esc(r.version)}. A backup is taken first, and it goes back by itself if anything fails.`],
+    act = r.helper ? `<button class="sbtn main" data-upd="go">Update now</button>` : `<div class="snote"><b>Updating from here needs the host helper.</b> ${hlRunIn()} this once, then the button works. Or update from the terminal:${cmdHTML(hlCmd('agent install'))}${cmdHTML(hlCmd('update'))}</div>`;
+  else if (r.latest) head = ['ok', 'You\u2019re up to date', `Version ${esc(r.version)}`];
+  else head = ['off', 'Can\u2019t reach the release list', `You have ${esc(r.version)}. Check your connection, or run the update check in the terminal.`], act = cmdHTML(hlCmd('update --check'));
+  body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot ${head[0]}" aria-hidden="true"></i><span><b>${head[1]}</b><small>${head[2]}</small></span></div>${r.available ? news : ''}</section>`
+    + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button>`);
+  if (busy) updPoll = setTimeout(() => SET.page === 'update' && setUpdatePage(setHome()), 4000);
+}
+async function updAct(what) {
+  if (what === 'check') { SET.updFresh = true; return setUpdatePage(setHome()); }
+  const cur = await setApi('/server/update'); SET.updFrom = cur.version || null;
+  const r = await setApi('/server/update', {});
+  if (!r.ok) { SET.updFrom = null; toast(r.msg || r.error || 'The update did not start.'); return setUpdatePage(setHome()); }
+  setUpdatePage(setHome());
 }
 // ---------- Apps: the optional apps, what each one uses, and Add / Remove through the host helper ----------
 let appsPoll = null, appsBusy = {};
@@ -366,6 +398,7 @@ $('#set-back').onclick = () => { SET.news = null; SET.prof = false; if (SET.page
 
 $('#set-body').addEventListener('click', async (e) => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.upd) return updAct(t.dataset.upd);
   if (t.dataset.appAdd) return appsChange('add', t.dataset.appAdd);
   if (t.dataset.appRm) { if (await confirmSheet({ title: 'Remove this app?', text: 'Its data is kept, so adding it again picks up where it was.', ok: 'Remove' })) appsChange('remove', t.dataset.appRm); return; }
   if (t.dataset.nw) return newsAct(t);
