@@ -551,6 +551,16 @@ class Everyday(Base):
         r = subprocess.run([link, "frobnicate"], capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
 
+    def test_the_launcher_runs_its_own_copy_from_inside_another_one(self):
+        other = os.path.join(self.tmp, "other-copy")
+        os.makedirs(os.path.join(other, "core"))
+        open(os.path.join(other, "core", "__init__.py"), "w").close()
+        open(os.path.join(other, "core", "cli.py"), "w").write('print("the other copy ran")\n')
+        r = subprocess.run([os.path.join(ROOT, "bin", "homelab"), "path", "--help"], capture_output=True, text=True, cwd=other, env={**os.environ, "HL_HOME": self.home})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("the other copy ran", r.stdout)
+        self.assertIn("usage", r.stdout)
+
     def test_times_are_twelve_hour(self):
         self.assertEqual(cli.when(datetime.datetime(2026, 11, 3, 16, 5)), "Nov 3, 2026 4:05 PM")
         self.assertEqual(cli.when(datetime.datetime(2026, 11, 3, 0, 5)), "Nov 3, 2026 12:05 AM")
