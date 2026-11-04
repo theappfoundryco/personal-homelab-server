@@ -2,21 +2,36 @@
 
 A private assistant for your day that runs on your own machine: a dashboard, a Telegram bot, and optional apps for monitoring and local AI. Nothing leaves your computer unless you choose to connect it.
 
-<p>
-  <img src="demo/baselines/journal.png" alt="The journal page, with demo data" width="260">
-  <img src="demo/baselines/gym.png" alt="The gym page, with demo data" width="260">
-  <img src="demo/baselines/sg.png" alt="The health page, with demo data" width="260">
-</p>
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/home-phone.png" alt="Home: greeting, weather, briefing, your day and a world clock" width="220"><br><sub><b>Home</b><br>weather, your day, a morning briefing</sub></td>
+    <td align="center"><img src="docs/screenshots/journal-phone.png" alt="Journal: tonight's entry and recent nights with a mood score" width="220"><br><sub><b>Journal</b><br>write your night, see the mood over time</sub></td>
+    <td align="center"><img src="docs/screenshots/gym-phone.png" alt="Gym: next workout, this week, weight and recent personal records" width="220"><br><sub><b>Gym</b><br>workouts, streaks and personal records</sub></td>
+    <td align="center"><img src="docs/screenshots/health-phone.png" alt="Health: today's medicine tick-list and appointments" width="220"><br><sub><b>Health</b><br>medicine and appointment reminders</sub></td>
+  </tr>
+</table>
 
-*Screenshots use fake demo data.*
+*All screenshots come from fake demo data (`demo/generate.py`) and are recorded by `demo/screenshots.py`.*
 
 ## What it does
 
-- **Dashboard** with notes, reminders and goals, a private journal with nightly and weekly summaries, a gym log, health reminders, a calendar view, weather, news, a world clock and a morning briefing.
-- **Telegram bot** that understands plain words ("remind me to call the bank at 5") and answers from your own data.
-- **Optional apps**, one choice at a time: Grafana and Prometheus monitoring, Ollama and Open WebUI for local AI, speech to text, n8n, Uptime Kuma, AdGuard and more.
-- **Fits your machine.** A setup wizard looks at your hardware and suggests sensible AI models. Every optional feature shows a clear message and a fix when its dependency is missing, and never crashes.
-- **Yours.** Your data lives in `~/.homelab`. Updates never touch it.
+**A dashboard that works like an app on your phone.** Open it in any browser on your home network and add it to your home screen. Dark and light themes, and every size and colour comes from one set of design tokens.
+
+- **Home.** A greeting, the weather, what is on today and tomorrow, a world clock, and a **Brief me** button that reads out a short morning briefing (weather, your calendar, the news and a server recap). Each part drops out quietly when its source is missing.
+- **Journal.** Write your day. Optionally get a private nightly summary, a mood score, a weekly recap and deeper insights, all written by a model that runs on your own machine.
+- **Gym.** Log workouts (training days, exercises, sets, body weight), see your weekly streak, personal records and progress charts.
+- **Health.** Medicine times, weekly courses and appointments that you add yourself. A tick-list for remembering, never medical advice.
+- **Planner and notes.** Say it in plain words: notes, one-off or repeating reminders, and long-term goals.
+- **News, weather, flights, email.** Headlines by topic with short AI digests, forecasts for home or any city, flights found in your calendar with a "time to leave" nudge, and a short list of important email (Gmail app password, off until you add one).
+- **Server and apps.** See whether anything is down, how hot the machine is, restart an app or read its logs, and add your own Docker apps.
+
+**A Telegram bot.** Talk to it in plain words ("remind me to water the plants tomorrow", "any important emails") and it answers from your own data.
+
+**Optional apps, one choice at a time.** Grafana and Prometheus for monitoring, Ollama and Open WebUI for local AI, speech to text, n8n, Uptime Kuma, AdGuard and more. Nothing is installed that you did not pick.
+
+**It fits your machine and never breaks quietly.** A setup wizard looks at your hardware and suggests sensible AI models. Every optional feature (AI, internet, calendar, Telegram) shows a clear message and a fix when its dependency is missing. Run `homelab doctor` for the full picture.
+
+**It is yours.** Your data lives in `~/.homelab`, outside the project folder. Updates never touch it, and backups are one command.
 
 ## Requirements
 
