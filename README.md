@@ -26,10 +26,6 @@ curl -fsSL https://raw.githubusercontent.com/theappfoundryco/personal-homelab-se
 
 </div>
 
-| 19 | 10 | 18 | 340+ | 20,000+ |
-|:---:|:---:|:---:|:---:|:---:|
-| modules | optional apps | `homelab` commands | automated tests | lines of code |
-
 ## What it is
 
 One install gives you a dashboard that works like an app on your phone, a Telegram bot that understands plain words, and a command line to look after it all. Everything runs in Docker on a computer you own. Your data lives in `~/.homelab`, outside the project folder, and updates never touch it.
