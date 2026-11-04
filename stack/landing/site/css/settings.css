@@ -24,14 +24,14 @@
 .sfield.bad input { border-color: var(--bad); }
 .sfield .why { margin: var(--sp-1) var(--sp-1) 0; font-size: var(--t-sm); color: var(--bad); }
 .sfield .hint { margin: var(--sp-1) var(--sp-1) 0; font-size: var(--t-sm); color: var(--faint); }
-.sgroup { margin: var(--sp-6) var(--sp-1) 0; font-size: var(--t-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.sgroup { margin: var(--sp-6) var(--sp-1) var(--gap); font-size: var(--t-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .sbtn { display: block; width: 100%; height: var(--h-btn); margin-top: var(--sp-4); border-radius: var(--r-md); background: var(--raised); font-size: var(--t-base); font-weight: 600; }
 .sbtn.main { background: var(--sel); color: var(--on-sel); }
 .sbtn.danger { color: var(--bad); }
 .snote { margin-top: var(--sp-4); padding: var(--pad-y) var(--pad-x); border-radius: var(--r-md); background: var(--card); box-shadow: var(--shadow); font-size: var(--t-md); color: var(--muted); }
 .snote b { color: var(--text); }
 .srows { padding: 0 var(--pad-x); }
-.srows + .sgroup, .srow + .sgroup { margin-top: var(--sp-6); }
+.srows + .sgroup, .srow + .sgroup, .srows + .srows { margin-top: var(--sp-6); }  /* two cards in a row (About) never touch */
 .srow2x { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-2); }
 .needs { margin-top: var(--sp-3); padding: var(--pad-y) var(--pad-x); border-radius: var(--r-lg); border: var(--hair) dashed var(--line-2); display: flex; gap: var(--sp-3); }
 .needs small strong { color: var(--text); font-weight: 600; }
