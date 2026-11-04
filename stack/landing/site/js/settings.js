@@ -127,7 +127,7 @@ async function setUpdatePage(body) {
   if (r.ok && r.state === 'updating' && !SET.updFrom) SET.updFrom = r.version;  // opened while one is running
   const busy = r.state === 'updating' || (SET.updFrom && !r.ok);  // while it restarts nothing answers for a moment, which is expected
   const log = r.ok && r.log && r.log.length ? `<div class="snote">${r.log.map(esc).join('<br>')}</div>` : '';
-  const news = r.ok && /^https:\/\/github\.com\//.test(r.url || '') ? `<a class="srow sgo" href="${esc(r.url)}" target="_blank" rel="noopener"><span><b>What\u2019s new</b><small>Release notes for ${esc(r.latest)}</small></span><span class="chev">${CHEV}</span></a>` : '';
+  const news = r.ok && /^https:\/\/github\.com\//.test(r.url || '') ? `<a class="srow sgo" href="${esc(r.url)}" target="_blank" rel="noopener"><span><b>Full release notes</b><small>Version ${esc(r.latest)} on GitHub</small></span><span class="chev">${CHEV}</span></a>` : '';
   let head, act = '';
   if (busy) head = ['warn', `Updating${r.to ? ' to ' + esc(r.to) : ''}\u2026`, 'Backing up, then rebuilding. This page reloads when it is done. If something fails, it goes back by itself.'];
   else if (!r.ok) head = ['off', 'Can\u2019t check right now', 'The assistant is not answering. Check that it is running, then try again.'];
@@ -136,9 +136,14 @@ async function setUpdatePage(body) {
     act = r.helper ? `<button class="sbtn main" data-upd="go">Update now</button>` : `<div class="snote"><b>Updating from here needs the host helper.</b> ${hlRunIn()} this once, then the button works. Or update from the terminal:${cmdHTML(hlCmd('agent install'))}${cmdHTML(hlCmd('update'))}</div>`;
   else if (r.latest) head = ['ok', 'You\u2019re up to date', `Version ${esc(r.version)}`];
   else head = ['off', 'Can\u2019t reach the release list', `You have ${esc(r.version)}. Check your connection, or run the update check in the terminal.`], act = cmdHTML(hlCmd('update --check'));
+  const notes = r.ok && r.available && !busy ? `<div class="sgroup">New in ${esc(r.latest)}</div><section class="card upd-notes">${updNotesHTML(r.notes)}</section>` : '';
   body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot ${head[0]}" aria-hidden="true"></i><span><b>${head[1]}</b><small>${head[2]}</small></span></div>${r.available ? news : ''}</section>`
-    + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button>`);
-  if (busy) updPoll = setTimeout(() => SET.page === 'update' && setUpdatePage(setHome()), 4000);
+    + notes + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button><div id="upd-hist"></div>`);
+  if (busy) { updPoll = setTimeout(() => SET.page === 'update' && setUpdatePage(setHome()), 4000); return; }
+  const h = await setApi('/server/update/history').catch(() => ({}));  // past releases, each with its notes
+  if (SET.page !== 'update' || !$('#upd-hist') || !h.ok || !(h.releases || []).length) return;
+  $('#upd-hist').innerHTML = `<div class="sgroup">What\u2019s new</div>` + h.releases.map((x) => `<section class="card upd-rel"><h3>${esc(x.version)}<small>${x.version === h.version ? 'This version' : ''}</small>${/^https:\/\/github\.com\//.test(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">GitHub</a>` : ''}</h3>`
+    + (x.first ? `<p class="upd-none">The first public release.</p>` : updNotesHTML(x.notes)) + '</section>').join('');
 }
 async function updAct(what) {
   if (what === 'check') { SET.updFresh = true; return setUpdatePage(setHome()); }

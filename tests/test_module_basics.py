@@ -292,8 +292,8 @@ class Basics(unittest.TestCase):
         self.assertIsNone(m.vtuple("v1.0.0-rc1"))
         d = tempfile.mkdtemp()
         asked = []
-        rel = {"tag": "v0.2.0", "url": "https://github.com/x/y/releases/tag/v0.2.0", "notes": "n"}
-        self.patch(m, DATA=d, VERSION="0.1.0", latest_release=type("L", (), {"__call__": lambda self: rel, "clear": lambda self: None})(),
+        rel = {"tag": "v0.2.0", "url": "https://github.com/x/y/releases/tag/v0.2.0"}
+        self.patch(m, DATA=d, VERSION="0.1.0", release_notes=lambda a, b: {"date": "", "security": [], "new": ["N."], "fixed": []}, latest_release=type("L", (), {"__call__": lambda self: rel, "clear": lambda self: None})(),
                    host_action=lambda act, name="": asked.append(act) or {"ok": True, "msg": "update started"})
         base = harness.start_api(self.bot)[1]
         code, out = harness.call(base, "GET", "/server/update")
@@ -311,6 +311,48 @@ class Basics(unittest.TestCase):
         self.patch(m, latest_release=lambda: None)  # offline or not public yet: no crash, nothing offered
         out = harness.call(base, "GET", "/server/update")[1]
         self.assertEqual((out["available"], out["latest"]), (False, None))
+
+    def test_release_notes_come_from_commit_prefixes_in_three_kinds(self):
+        import modules.server as m
+        n = m.parse_notes(["security: lock the PIN after five wrong tries", "feat: add an update popup (#7)", "fix(weather): stop showing yesterday.",
+                           "feat!: a bigger change", "docs: explain releases", "changes", "Merge pull request #5 from x/y", "fix: stop showing yesterday"])
+        self.assertEqual(n, {"security": ["Lock the PIN after five wrong tries."], "new": ["Add an update popup.", "A bigger change."], "fixed": ["Stop showing yesterday."]})
+
+    def test_release_notes_are_read_once_and_history_and_the_updated_card_follow_the_version(self):
+        import json, os, tempfile
+        import modules.server as m
+        d, calls = tempfile.mkdtemp(), []
+        def http(url, **kw):
+            calls.append(url)
+            if url.endswith("/tags?per_page=100"):
+                return [{"name": "v0.1.1"}, {"name": "v0.1.0"}, {"name": "v0.2.0-rc1"}]
+            return {"commits": [{"commit": {"message": "fix: a bug\n\nmore words", "committer": {"date": "2026-11-04T10:00:00Z"}}},
+                                {"commit": {"message": "security: a hole", "committer": {"date": "2026-11-05T10:00:00Z"}}}]}
+        m.release_tags.clear()
+        self.patch(m, DATA=d, VERSION="0.1.1", http=http)
+        n = m.release_notes("0.1.0", "0.1.1")
+        self.assertEqual(n, {"date": "2026-11-05", "security": ["A hole."], "new": [], "fixed": ["A bug."]})
+        m.release_notes("0.1.0", "0.1.1")
+        self.assertEqual(sum("/compare/v0.1.0...v0.1.1" in c for c in calls), 1)  # tags never move, so it is asked for once
+        hist = m.release_history()
+        self.assertEqual([(x["version"], x["first"]) for x in hist], [("0.1.1", False), ("0.1.0", True)])
+        self.assertEqual(hist[0]["notes"]["security"], ["A hole."])
+        self.patch(m, http=lambda url, **kw: (_ for _ in ()).throw(OSError("offline")))
+        self.assertIsNone(m.release_notes("0.1.1", "0.1.2"))  # offline: None, and nothing is saved
+        self.assertNotIn("v0.1.1...v0.1.2", json.load(open(f"{d}/release-notes.json")))
+        self.patch(m, http=http)
+        m.release_tags.clear()
+        base = harness.start_api(self.bot)[1]
+        self.assertIsNone(harness.call(base, "GET", "/server/update")[1]["updated"])  # a fresh install shows no Updated card
+        json.dump({"version": "0.1.0"}, open(f"{d}/version-seen.json", "w"))
+        u = harness.call(base, "GET", "/server/update")[1]["updated"]
+        self.assertEqual((u["from"], u["to"], u["notes"]["fixed"]), ("0.1.0", "0.1.1", ["A bug."]))
+        self.assertTrue(harness.call(base, "POST", "/server/update/seen", {})[1]["ok"])
+        self.assertIsNone(harness.call(base, "GET", "/server/update")[1]["updated"])
+        self.assertEqual(harness.call(base, "GET", "/server/update/history")[1]["releases"][0]["version"], "0.1.1")
+        os.remove(f"{d}/version-seen.json")
+        json.dump({"from": "0.1.0", "to": "0.1.1", "at": m.time.time()}, open(f"{d}/update-started.json", "w"))
+        self.assertEqual(harness.call(base, "GET", "/server/update")[1]["updated"]["from"], "0.1.0")  # updated from the dashboard: the card shows
 
     def test_clocks_can_be_added_and_removed_live(self):
         import modules.clock as m

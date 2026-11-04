@@ -86,7 +86,7 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 
 - **Pinned.** Every Docker image is pinned to an exact version, and CI fails if one is not.
 - **Tested.** Over 340 automated tests, including recorded API replies, and a scan of every change for secrets, emails and public IP addresses.
-- **Safe updates.** `homelab update` takes a snapshot first and goes back by itself if anything fails.
+- **Safe updates.** When a new version is out, the dashboard shows what it brings (Security, New and Fixed) and updates with one tap, or run `homelab update`. Either way it takes a snapshot first and goes back by itself if anything fails.
 - **Backups in one command.** `homelab backup` saves your data and settings to one file, `homelab restore` brings it back. Backups are plain files, so keep them somewhere safe.
 - **Private by default.** The dashboard listens on this machine only until you open it to your network with a PIN. The only outside calls are for features you use, such as weather and news feeds.
 - **Open.** MIT licence, built in the open, and written so that one missing piece never takes the rest down.
@@ -113,7 +113,7 @@ cd personal-homelab-server
 ## Update and uninstall
 
 ```bash
-homelab update                    # snapshot first, and back by itself if anything fails
+homelab update                    # snapshot first, and back by itself if anything fails (the dashboard offers the same)
 homelab update --check            # only say whether a newer version exists
 homelab update --channel edge     # follow the newest work instead of tagged releases
 

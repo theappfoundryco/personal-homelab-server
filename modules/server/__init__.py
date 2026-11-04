@@ -252,14 +252,82 @@ def vtuple(v):
     return tuple(int(x) for x in m.groups()) if m else None
 
 
+CATS = (("security", "security"), ("feat", "new"), ("fix", "fixed"))  # commit prefix, notes section; the popup shows them in this order
+NOTE = re.compile(r"(feat|fix|security)(?:\([^)]*\))?!?:\s*(.+)")
+
+
+def parse_notes(subjects):
+    """Commit subjects as release notes: feat: is New, fix: is Fixed, security: is Security. Other prefixes (docs:, chore:, ...) are left out."""
+    out = {sec: [] for _, sec in CATS}
+    for s in subjects:
+        m = NOTE.fullmatch(str(s or "").strip())
+        if not m:
+            continue
+        text = re.sub(r"\s*\(#\d+\)$", "", m.group(2)).strip().rstrip(".")
+        text = text[:1].upper() + text[1:] + "." if text else ""
+        sec = dict(CATS)[m.group(1)]
+        if text and text not in out[sec]:
+            out[sec].append(text)
+    return out
+
+
 @cached(600)
-def latest_release():
-    """The newest release tag (what `homelab update` follows on the stable channel; a pre-release such as v1.0.0-rc1 does not count), or None when it cannot be read."""
+def release_tags():
+    """Every plain release tag, newest first (a pre-release such as v1.0.0-rc1 does not count). Raises when the list cannot be read."""
+    tags = [t["name"] for t in http(f"https://api.github.com/repos/{REPO}/tags?per_page=100", timeout=8, headers={"Accept": "application/vnd.github+json"}) if vtuple(t.get("name"))]
+    return sorted(tags, key=vtuple, reverse=True)
+
+
+def tags_or_none():
     try:
-        tags = [t["name"] for t in http(f"https://api.github.com/repos/{REPO}/tags?per_page=100", timeout=8, headers={"Accept": "application/vnd.github+json"}) if vtuple(t.get("name"))]
-        return {"tag": max(tags, key=vtuple), "url": f"https://github.com/{REPO}/releases/tag/{max(tags, key=vtuple)}", "notes": ""} if tags else None
+        return release_tags()
+    except Exception:  # offline, or the list cannot be read: nothing is offered, nothing breaks
+        return None
+
+
+def latest_release():
+    """The newest release tag (what `homelab update` follows on the stable channel), or None when it cannot be read."""
+    tags = tags_or_none()
+    return {"tag": tags[0], "url": f"https://github.com/{REPO}/releases/tag/{tags[0]}"} if tags else None
+
+
+latest_release.clear = lambda: release_tags.clear()
+
+
+def release_notes(old, new):
+    """What changed from version old to version new, from the commit messages between the two tags: {date, security, new, fixed}, or None when it cannot be read.
+    Tags never move, so an answer is kept in the data folder and asked for once."""
+    key, path = f"v{str(old).lstrip('v')}...v{str(new).lstrip('v')}", f"{DATA}/release-notes.json"
+    saved = safe(lambda: json.load(open(path)), {}) or {}
+    if key in saved:
+        return saved[key]
+    try:
+        r = http(f"https://api.github.com/repos/{REPO}/compare/{key}", timeout=8, headers={"Accept": "application/vnd.github+json"})
+        commits = r.get("commits") or []
+        notes = {"date": ((commits[-1].get("commit") or {}).get("committer") or {}).get("date", "")[:10] if commits else "",
+                 **parse_notes((c.get("commit") or {}).get("message", "").split("\n")[0] for c in commits)}
     except Exception:
         return None
+    saved[key] = notes
+    safe(lambda: json.dump(saved, open(path, "w")))
+    return notes
+
+
+def release_history(n=5):
+    """The newest n releases up to this version, each with its notes against the release before it."""
+    tags = [t for t in (tags_or_none() or []) if vtuple(t) <= vtuple(VERSION)][:n + 1]
+    return [{"version": t.lstrip("v"), "url": f"https://github.com/{REPO}/releases/tag/{t}", "notes": release_notes(prev, t) if prev else None, "first": not prev}
+            for t, prev in zip(tags, tags[1:] + [None])][:n]
+
+
+def seen_version(mark=None):
+    """The version whose notes were last shown. A fresh install starts at its own version, so only a real update shows the Updated card."""
+    path = f"{DATA}/version-seen.json"
+    v = (safe(lambda: json.load(open(path)), None) or {}).get("version")
+    if not v:
+        v = (mark or {}).get("from") or VERSION
+        safe(lambda: json.dump({"version": v}, open(path, "w")))
+    return v
 
 
 def update_log_tail(n=4):
@@ -276,6 +344,7 @@ def update_state(fresh=False):
         latest_release.clear()
     rel = latest_release()
     mark = safe(lambda: json.load(open(f"{DATA}/update-started.json")), None)
+    seen = seen_version(mark)
     state = "idle"
     if mark:
         if vtuple(VERSION) != vtuple(mark.get("from")):
@@ -283,8 +352,12 @@ def update_state(fresh=False):
         else:
             state = "updating" if time.time() - mark.get("at", 0) < UPDATE_STALE else "failed"
     have, want = vtuple(VERSION), vtuple((rel or {}).get("tag"))
-    return {"version": VERSION, "latest": rel["tag"].lstrip("v") if rel else None, "available": bool(have and want and want > have), "url": rel["url"] if rel else "",
-            "notes": rel["notes"] if rel else "", "state": state, "log": update_log_tail() if state != "idle" else [], "helper": not CAPS.missing(["host_agent"]),
+    available = bool(have and want and want > have)
+    updated = None
+    if vtuple(seen) and have and vtuple(seen) < have:
+        updated = {"from": seen, "to": VERSION, "notes": release_notes(seen, VERSION)}
+    return {"version": VERSION, "latest": rel["tag"].lstrip("v") if rel else None, "available": available, "url": rel["url"] if rel else "",
+            "notes": release_notes(VERSION, rel["tag"]) if available else None, "updated": updated, "state": state, "log": update_log_tail() if state != "idle" else [], "helper": not CAPS.missing(["host_agent"]),
             "to": (mark or {}).get("to") if state != "idle" else None}
 
 
@@ -391,6 +464,15 @@ def register(app):
     @router.get("/server/update")
     def server_update(req):
         return {"ok": True, **update_state(fresh=req.query.get("fresh") == "1")}
+
+    @router.get("/server/update/history")
+    def server_update_history(req):
+        return {"ok": True, "version": VERSION, "releases": release_history()}
+
+    @router.post("/server/update/seen")  # the Updated card was read or closed
+    def server_update_seen(req):
+        safe(lambda: json.dump({"version": VERSION}, open(f"{DATA}/version-seen.json", "w")))
+        return {"ok": True}
 
     @router.post("/server/update")
     def server_update_start(req):
