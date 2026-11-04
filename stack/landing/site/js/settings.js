@@ -138,7 +138,9 @@ async function setUpdatePage(body) {
   else head = ['off', 'Can\u2019t reach the release list', `You have ${esc(r.version)}. Check your connection, or run the update check in the terminal.`], act = cmdHTML(hlCmd('update --check'));
   const notes = r.ok && r.available && !busy ? `<div class="sgroup">New in ${esc(r.latest)}</div><section class="card upd-notes">${updNotesHTML(r.notes)}</section>` : '';
   body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot ${head[0]}" aria-hidden="true"></i><span><b>${head[1]}</b><small>${head[2]}</small></span></div>${r.available ? news : ''}</section>`
-    + notes + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button><div id="upd-hist"></div>`);
+    + notes + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button>`)
+    + (r.ok && r.telegram && !busy ? `<section class="card srows sgap"><div class="srow"><span><b>Tell me on Telegram</b><small>When a new version is out, with what it brings and an Update now button</small></span>${swHTML(r.prefs && r.prefs.telegram, 'upd-tg', 'Tell me on Telegram')}</div></section>` : '')
+    + (busy ? '' : '<div id="upd-hist"></div>');
   if (busy) { updPoll = setTimeout(() => SET.page === 'update' && setUpdatePage(setHome()), 4000); return; }
   const h = await setApi('/server/update/history').catch(() => ({}));  // past releases, each with its notes
   if (SET.page !== 'update' || !$('#upd-hist') || !h.ok || !(h.releases || []).length) return;
@@ -404,6 +406,7 @@ $('#set-back').onclick = () => { SET.news = null; SET.prof = false; if (SET.page
 $('#set-body').addEventListener('click', async (e) => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.upd) return updAct(t.dataset.upd);
+  if (t.dataset.sw === 'upd-tg') { const on = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', on); const r = await setApi('/server/update/prefs', { telegram: on }); if (!r.ok) { t.setAttribute('aria-checked', !on); toast('That did not save.'); } return; }
   if (t.dataset.appAdd) return appsChange('add', t.dataset.appAdd);
   if (t.dataset.appRm) { if (await confirmSheet({ title: 'Remove this app?', text: 'Its data is kept, so adding it again picks up where it was.', ok: 'Remove' })) appsChange('remove', t.dataset.appRm); return; }
   if (t.dataset.nw) return newsAct(t);

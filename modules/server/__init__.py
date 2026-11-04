@@ -342,11 +342,54 @@ def update_state(fresh=False):
         updated = {"from": seen, "to": VERSION, "notes": release_notes(seen, VERSION)}
     return {"version": VERSION, "latest": rel["tag"].lstrip("v") if rel else None, "available": available, "url": rel["url"] if rel else "",
             "notes": release_notes(VERSION, rel["tag"]) if available else None, "updated": updated, "state": state, "log": update_log_tail() if state != "idle" else [], "helper": not CAPS.missing(["host_agent"]),
-            "to": (mark or {}).get("to") if state != "idle" else None}
+            "to": (mark or {}).get("to") if state != "idle" else None, "telegram": not CAPS.missing(["telegram"]), "prefs": update_prefs()}
+
+
+def start_update():
+    """Starts the safe update through the host helper (the dashboard button and the Telegram button both land here). -> (ok, message)."""
+    st = update_state()
+    if st["state"] == "updating":
+        return False, "An update is already running."
+    if not st["available"]:
+        return False, "You already have the newest version."
+    r = host_action("update")
+    if r.get("ok"):
+        json.dump({"from": VERSION, "to": st["latest"], "at": time.time()}, open(f"{DATA}/update-started.json", "w"))
+    return bool(r.get("ok")), r.get("msg", "")
+
+
+def update_prefs():
+    return {"telegram": True, **(safe(lambda: json.load(open(f"{DATA}/update-prefs.json")), {}) or {})}
+
+
+KIND_LINES = (("security", "🔒 <b>Security</b>"), ("new", "✨ <b>New</b>"), ("fixed", "🛠 <b>Fixed</b>"))
+
+
+def update_text(st):
+    n = st.get("notes") or {}
+    parts = [f"⬆️ <b>Homelab {esc(st['latest'])} is out</b> (you have {esc(st['version'])})"]
+    for k, head in KIND_LINES:
+        if n.get(k):
+            parts.append(head + "\n" + "\n".join(f"• {esc(x)}" for x in n[k][:6]) + (f"\n• and {len(n[k]) - 6} more" if len(n[k]) > 6 else ""))
+    parts.append("A snapshot is taken first, and it goes back by itself if anything fails." if st["helper"] else "Update from the terminal with: homelab update")
+    return "\n\n".join(parts)
+
+
+def check_update():
+    """Telegram, once per version: what a new release brings and an Update now button; once it is in, a short note. Quiet while
+    Telegram is off, while the dashboard cannot read the release list, or when turned off in Settings, Updates."""
+    if CAPS.missing(["telegram"]) or not update_prefs()["telegram"]:
+        return
+    st = update_state()
+    if st.get("updated") and once(f"updated:{VERSION}"):
+        safe(lambda: json.dump({"version": VERSION}, open(f"{DATA}/version-seen.json", "w")))  # said on Telegram, so the Home card need not
+        send(f"✅ <b>Now on {esc(VERSION)}</b>. Your data and settings are as they were.")
+    if st["available"] and st["state"] == "idle" and once(f"update-offer:{st['latest']}"):
+        send(update_text(st), [[B("⬆️ Update now", f"upd:go:{st['latest']}"), B("Later", "upd:later")]] if st["helper"] else None)
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
+    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "once", "send", "typing")
 
     router = app.router
 
@@ -463,15 +506,16 @@ def register(app):
         from core.settings import guard_request
         if bad := guard_request(SETTINGS, req):  # the settings PIN, when one is set, guards updating too
             return bad
-        st = update_state()
-        if st["state"] == "updating":
-            return {"ok": False, "msg": "An update is already running."}, 409
-        if not st["available"]:
-            return {"ok": False, "msg": "You already have the newest version."}, 409
-        r = host_action("update")
-        if r.get("ok"):
-            json.dump({"from": VERSION, "to": st["latest"], "at": time.time()}, open(f"{DATA}/update-started.json", "w"))
-        return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+        ok, msg = start_update()
+        if not ok and msg in ("An update is already running.", "You already have the newest version."):
+            return {"ok": False, "msg": msg}, 409
+        return {"ok": ok, "msg": msg}
+
+    @router.post("/server/update/prefs")  # {telegram: bool}: tell me on Telegram when a new version is out
+    def server_update_prefs(req):
+        p = {**update_prefs(), "telegram": bool((req.json() or {}).get("telegram"))}
+        json.dump(p, open(f"{DATA}/update-prefs.json", "w"))
+        return {"ok": True, **p}
 
     @router.post("/server/gitsync")  # back up to GitHub now; answers with what the run did
     def server_gitsync(req):

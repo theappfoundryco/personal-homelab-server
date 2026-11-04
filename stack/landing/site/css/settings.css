@@ -53,3 +53,4 @@
 .sgo .chev { flex: none; color: var(--faint); }
 .sgo .chev svg { display: block; width: var(--g-sm); height: var(--g-sm); }
 .sfoot { margin: var(--sp-6) 0 var(--sp-4); text-align: center; font-size: var(--t-sm); color: var(--faint); }
+.sgap { margin-top: var(--sp-4); }  /* a card that follows buttons */

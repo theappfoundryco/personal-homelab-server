@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from core import host, intent as _intent
 from core.helpers import esc, now, t12
 
-NEEDS = ("B", "BARE_DONE", "GOAL_ADD", "HOME", "KEYBOARD", "NAME", "OWNER", "TG", "TOPIC_GENERIC", "TOPIC_WORDS", "TZ", "_lock", "achieve_goal", "add_goal", "add_note", "add_reminder", "app_buttons", "app_name", "bare_done", "chat", "cricket_items", "del_reminder", "detect_topic", "done_note", "edit", "evening", "events_for", "extras", "feed_items", "find_app", "flight_text", "flights", "full_briefing", "fx", "gmail", "goal_text", "goals_view", "host_action", "ics_text", "journal", "journal_day", "journal_save", "live_digest", "logs", "manage_notes", "manage_reminders", "med_snooze", "med_tick", "morning_briefing", "my_day", "news_search", "nice_when", "note_text", "notes_view", "past_drop", "photo", "reminders_view", "restart_app", "save", "search", "send", "server", "sg", "sg_save", "shared_location", "snooze", "sports", "state", "stored", "suggested_tags", "summarise_link", "summarise_topic", "tg", "topic_news", "typed_meds", "undo_note", "unload_ai", "update_note", "voice", "weather", "weather_data", "weekly", "world_clock")
+NEEDS = ("B", "BARE_DONE", "GOAL_ADD", "HOME", "KEYBOARD", "NAME", "OWNER", "TG", "TOPIC_GENERIC", "TOPIC_WORDS", "TZ", "_lock", "achieve_goal", "add_goal", "add_note", "add_reminder", "app_buttons", "app_name", "bare_done", "chat", "cricket_items", "del_reminder", "detect_topic", "done_note", "edit", "evening", "events_for", "extras", "feed_items", "find_app", "flight_text", "flights", "full_briefing", "fx", "gmail", "goal_text", "goals_view", "host_action", "ics_text", "journal", "journal_day", "journal_save", "live_digest", "logs", "manage_notes", "manage_reminders", "med_snooze", "med_tick", "morning_briefing", "my_day", "news_search", "nice_when", "note_text", "notes_view", "past_drop", "photo", "reminders_view", "restart_app", "save", "search", "send", "server", "sg", "sg_save", "shared_location", "snooze", "sports", "start_update", "state", "stored", "suggested_tags", "summarise_link", "summarise_topic", "tg", "topic_news", "typed_meds", "undo_note", "unload_ai", "update_note", "voice", "weather", "weather_data", "weekly", "world_clock")
 
 
 def bind():
@@ -237,6 +237,11 @@ def on_callback(q):
             state.setdefault("journal", {}).update(next=time.time() + m * 60, auto=False, msg=None, day=journal_day())
             save()
         return edit(msg, f"💤 I'll remind you to write your <b>journal</b> at {t12(now() + timedelta(minutes=m))}.")
+    if data.startswith("upd:"):  # ⬆️ Update now or Later on a new-version message
+        if data == "upd:later":
+            return edit(msg, esc((msg.get("text") or "")[:3500]) + "\n\n👍 Later. Update any time from Settings, Updates in the dashboard.")
+        ok, why = start_update()
+        return edit(msg, "⏳ <b>Updating now.</b> The assistant restarts in a few minutes, and I will say when it is back." if ok else f"Could not start it: {esc(why)}")
     if data.startswith("sgtake:"):  # a button from before 0.2.0 (a weekly course): ticks that medicine
         _, cid, d = data.split(":", 2)
         return edit(msg, med_tick(cid, d))
