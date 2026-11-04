@@ -1,7 +1,7 @@
 name: health
 title: "Health reminders"
-description: "Medicine times, weekly courses and appointments you add yourself. Reminders only, never medical advice."
-version: 0.1.0
+description: "Medicines on your own schedule and appointments you add yourself, with optional Telegram reminders. Reminders only, never medical advice."
+version: 0.2.0
 default: true
 requires: []
 optional: [journal]

@@ -42,3 +42,29 @@
 .ai-c3 b { display: block; margin: 2px 0; font-size: var(--t-stat); font-weight: 650; letter-spacing: -.03em; line-height: 1.15; }
 .tab[data-tab="server"] { white-space: nowrap; letter-spacing: 0; }  /* "Server & Apps" on one line */
 .tab.on { color: var(--text); }
+/* Medicines (0.2.0): today by time, the add sheet, and the tab that shows your first name */
+.tab-n { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab { min-width: 0; }
+.sg-time { flex: none; width: calc(var(--ib) + var(--sp-5)); color: var(--muted); font-size: var(--t-sm); font-variant-numeric: tabular-nums; }
+.sg-pill { display: inline-block; margin-left: var(--sp-2); padding: var(--hair) var(--sp-2); border-radius: var(--r-xs); background: var(--raised); color: var(--muted); font-size: var(--t-xs); font-weight: 600; font-style: normal; vertical-align: middle; }
+.sg-add { height: var(--h-btn-sm); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: var(--raised); color: var(--text); font-size: var(--t-md); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.sg-row .chev { flex: none; color: var(--faint); }
+.sg-row .chev svg { width: var(--g-sm); height: var(--g-sm); }
+.sg-chips { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.sg-chip { height: var(--h-field); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: var(--card); color: var(--muted); font-size: var(--t-md); font-weight: 600; }
+.sg-chip.on { background: var(--sel); color: var(--on-sel); }
+.sg-chip.ghost { background: transparent; box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+.sg-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--sp-1); }
+.sg-days .sg-chip { padding: 0; }
+.sg-times { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.sg-tin { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.sg-f .sg-tin input { width: auto; min-width: calc(var(--h-tile) + var(--sp-7)); height: var(--h-field); }
+.sg-tin button { width: var(--ib-sm); height: var(--ib-sm); border-radius: 50%; color: var(--faint); }
+.sg-stop { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); color: var(--muted); font-size: var(--t-base); }
+.sg-f .sg-stop input { width: calc(var(--h-tile) + var(--sp-4)); }
+.sg-swrow { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-4); padding: var(--sp-3) var(--pad-x); border-radius: var(--r-md); background: var(--card); }
+.sg-swrow span { flex: 1; min-width: 0; }
+.sg-swrow b { display: block; font-size: var(--t-base); }
+.sg-swrow small { display: block; color: var(--muted); font-size: var(--t-sm); }
+#sgs .sheet-body { padding-bottom: var(--sp-4); }
+#sgs .sg-go { margin-top: var(--sp-4); background: var(--sel); color: var(--on-sel); }
