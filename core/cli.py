@@ -74,7 +74,16 @@ class Ctx:
         self.health_wait = HEALTH_WAIT
         self.prompt = lambda q: input(q) if sys.stdin.isatty() else ""
         self.probe = self._probe
+        self.running_version = self._running_version
         self.__dict__.update(over)
+
+    def _running_version(self):
+        """The version the running assistant reports, like "0.2.1", or None if nothing answers."""
+        try:
+            with urllib.request.urlopen(f"http://localhost:{self.port}/api/bot/server/update", timeout=5) as r:
+                return json.load(r).get("version")
+        except Exception:
+            return None
 
     def _probe(self):
         """The dashboard's health check as a dict, or None if nothing answers."""
@@ -662,6 +671,56 @@ def read_channel(c):
     return v if v in ("stable", "edge") else "stable"
 
 
+IMAGE_FILES = ("stack/telegram/Dockerfile", "stack/telegram/requirements.txt")  # the only things baked into the image; the code is mounted
+
+
+def disk_version(c):
+    """The version of the program files in this folder (core/version.py), or None."""
+    try:
+        m = re.search(r'VERSION = "([^"]+)"', open(os.path.join(c.root, "core", "version.py")).read())
+        return m.group(1) if m else None
+    except OSError:
+        return None
+
+
+def vkey(v):
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", str(v or "").strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def bring_up(c, old, new):
+    """Starts the new code. The program files are mounted into the containers, so the image is rebuilt only when what is baked
+    into it changed (IMAGE_FILES); otherwise a restart is enough, which takes seconds instead of minutes."""
+    rebuild = old is None or c.git("diff", "--quiet", old, new, "--", *IMAGE_FILES)[0] != 0
+    if rebuild:
+        c.out("  Rebuilding the assistant's image (its Python packages changed). This takes a few minutes.")
+        return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+    rc = c.compose("up", "-d", *services(c), stream=True)[0]
+    return rc or c.compose("restart", "telegram-bot", "landing", stream=True)[0]
+
+
+def catch_up(c, check):
+    """The program files are newer than what is running (moved by hand with git, say): restart with them. Nothing is downloaded."""
+    disk, live = disk_version(c), c.running_version()
+    if not (vkey(disk) and vkey(live) and vkey(live) < vkey(disk)):
+        return None
+    c.out(f"  The program files are on {disk}, but the running assistant is still on {live}.")
+    if check:
+        c.out(f"  Run {NAME} update to restart it with {disk}.")
+        return 0
+    if not c.docker_ready():
+        return 1
+    c.out("  Restarting it with the new files. Saved data is updated as it starts.")
+    if bring_up(c, None, None) != 0:
+        c.out(f"  stop  It would not start. See why with: {NAME} logs")
+        return 1
+    if not wait_healthy(c, False):
+        c.out(f"  stop  It started but did not answer its health check. See why with: {NAME} logs")
+        return 1
+    c.out(f"  ok    Now running {disk_version(c)}.")
+    return 0
+
+
 def wait_healthy(c, must_be_ok):
     for i in range(max(1, c.health_wait // HEALTH_EVERY)):
         rep = c.probe()
@@ -717,6 +776,9 @@ def update(c, check=False, dry=False, channel=None):
         c.out("  stop  Could not read the version history. Try: git fetch --tags")
         return 1
     if target == head:
+        r = catch_up(c, check or dry)
+        if r is not None:
+            return r
         c.out(f"  ok    Already up to date ({c.version()}).")
         return 0
     if c.git("merge-base", "--is-ancestor", head, target)[0] != 0:
@@ -757,7 +819,7 @@ def update(c, check=False, dry=False, channel=None):
         rollback(c, head, snapshot, must_be_ok)
         return 1
     c.out("  ok    Data is up to date. Starting the new version.")
-    if c.compose("up", "-d", "--build", *services(c), stream=True)[0] != 0:
+    if bring_up(c, head, target) != 0:
         c.out("  stop  The new version would not start.")
         rollback(c, head, snapshot, must_be_ok)
         return 1
