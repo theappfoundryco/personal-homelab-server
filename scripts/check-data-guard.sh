@@ -8,7 +8,7 @@ if [ "${1:-}" = "--all" ]; then files="$(git ls-files -co --exclude-standard)"
 else files="$(git diff --cached --name-only --diff-filter=ACMR)"; fi
 BAD_NAME='(^|/)(\.env[^/]*|[^/]*\.env|[^/]*\.(pem|key|pass|log|sqlite|db)|[^/]*\.bak[^/]*|[^/]*\.secret[^/]*|state[^/]*\.json)$'
 BAD_DIR='(^|/)(data|journal|\.?private|secrets?)/'
-IMG_OK='^(docs|web|demo|modules/[^/]+/web|stack/landing)/'   # tighten once stack/ is restructured
+IMG_OK='^(docs|web|demo|modules/[^/]+/web|stack/landing|\.github/assets)/'   # tighten once stack/ is restructured
 BIG=$((1024*1024))
 fail=0
 while IFS= read -r f; do
