@@ -639,6 +639,11 @@ def restore(c, path):
 
 # ---- update
 
+def hot(text):
+    """Bold red for the one line a person must not skim past, only at a terminal that shows colour."""
+    return f"\033[1;31m{text}\033[0m" if sys.stdout.isatty() and not os.environ.get("NO_COLOR") else text
+
+
 def release_tag(c):
     rc, text = c.git("tag", "-l", "v[0-9]*", "--sort=-v:refname")
     tags = [t for t in text.splitlines() if "-" not in t] if rc == 0 else []  # a dash marks a pre-release (v1.0.0-rc1)
@@ -918,7 +923,7 @@ def uninstall(c, purge=False):
     if purge:
         folder = os.path.basename(c.home.rstrip(os.sep)) or "data"
         word = folder.lstrip(".") or folder  # ".homelab" reads like punctuation next to "to confirm", so ask for "homelab" and take both
-        if c.prompt(f"  This cannot be undone. To go ahead, type the word {word} and press Enter: ").strip() not in (word, folder):
+        if c.prompt(hot(f"  This cannot be undone. To go ahead, type the word {word} and press Enter: ")).strip() not in (word, folder):
             c.out("  Cancelled. Nothing was changed.")
             return 1
     elif not c.ask("Remove these?"):
