@@ -12,6 +12,7 @@ A private, self-hosted assistant for the day: a dashboard (notes, journal, gym, 
 - Install: `get.sh` (one line, `curl ... | bash`) downloads the project with git and runs `install.sh`. It starts on the newest `v*` tag (stable) or on `main` (`HL_CHANNEL=edge`).
 - Update: `homelab update` needs a clean git tree, fetches, refuses a diverged copy, takes a snapshot backup, stops services, fast-forwards, runs data migrations, rebuilds, waits for `/api/bot/doctor`, and rolls back by itself on any failure. Channels: `stable` (highest release tag) and `edge` (`origin/main`).
 - Setup wizard on first run: name and time zone, machine, modules, AI engine, Telegram, access. Every step can be skipped.
+- Dashboard updates: Settings, Updates compares this version with the newest GitHub release (cached 10 minutes) and an Update now button asks the host helper to run `homelab update --yes`. The page polls until the new version answers, then reloads. The release lookup only works once the repository is public.
 - Custom apps: you can add your own Docker apps from Settings or the command line, each in its own compose project.
 - CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by release-please, and images are built and signed by `images.yml`.
 
@@ -73,6 +74,7 @@ The unit tests and `make check` run on both macOS and Linux. The maintainer has 
 - **Custom apps on real Docker.** Adding, starting and removing your own app has only run against fake tools.
 - **Homebrew record and purge** (what the installer installed, and removing it again) on a real Mac.
 - **launchd and systemd.** The host helper, autostart and the reboot path have never run for real on both systems.
+- **The dashboard Update button** has run only against fake helpers and the demo page, never a real update.
 - **`homelab update`, rollback and `restore`** against a real remote or a real failure.
 - **GitHub workflows.** None has run yet. Action versions in `.github/workflows` were written from memory and are unchecked.
 - **Pinned image versions** (n8n, Grafana, Open WebUI) were never started together. Check them and take `homelab backup` first.
@@ -82,7 +84,7 @@ The unit tests and `make check` run on both macOS and Linux. The maintainer has 
 
 - Some features are India-specific (news sources, cricket) and need generalising. Journal tags and the schedule need a pass.
 - Linux host-layer assumptions (metrics, network fallback) are not generalised. AdGuard and SearXNG need config templates.
-- A Grafana ntfy alert, the calendar wizard step and a dashboard Update button are not built.
+- A Grafana ntfy alert and the calendar wizard step are not built.
 - Backups are unencrypted. `homelab` is not on the PATH until you run `homelab path add`. On Linux the helper needs `sudo loginctl enable-linger $USER` to survive logout (the installer prints it, it cannot run it).
 - No cross-process update lock beyond the helper's own check. `homelab update` still builds images locally. Switching to prebuilt registry images is a later step.
 - Windows (WSL2) is refused politely for now.
