@@ -12,6 +12,7 @@ from core import apps as _apps
 from core import custom as _custom
 from core import host
 from core.helpers import cached, esc, http, now, safe
+from core.version import VERSION
 
 # ================================================================ server
 def prom(q):
@@ -241,6 +242,51 @@ def find_app(text):
              "home page": "landing", "dashboard": "homepage", "voice": "whisper"}
     return next((v for k, v in alias.items() if k in t), None)
 
+REPO = "theappfoundryco/personal-homelab-server"
+UPDATE_STALE = 1200  # an update that has not changed the version after this many seconds counts as failed
+
+
+def vtuple(v):
+    """'v0.2.10' as (0, 2, 10), so 0.2.10 is newer than 0.2.9. None when it is not a plain version."""
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", str(v or "").strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+@cached(600)
+def latest_release():
+    """The newest release tag (what `homelab update` follows on the stable channel; a pre-release such as v1.0.0-rc1 does not count), or None when it cannot be read."""
+    try:
+        tags = [t["name"] for t in http(f"https://api.github.com/repos/{REPO}/tags?per_page=100", timeout=8, headers={"Accept": "application/vnd.github+json"}) if vtuple(t.get("name"))]
+        return {"tag": max(tags, key=vtuple), "url": f"https://github.com/{REPO}/releases/tag/{max(tags, key=vtuple)}", "notes": ""} if tags else None
+    except Exception:
+        return None
+
+
+def update_log_tail(n=4):
+    try:
+        text = re.sub(r"\x1b\[[0-9;]*m", "", open(f"{DATA}/update.log", errors="replace").read()[-4000:])
+        return [l.strip() for l in text.splitlines() if l.strip()][-n:]
+    except OSError:
+        return []
+
+
+def update_state(fresh=False):
+    """What the Updates card shows: this version, the newest release, and whether an update is running, done or stuck."""
+    if fresh:
+        latest_release.clear()
+    rel = latest_release()
+    mark = safe(lambda: json.load(open(f"{DATA}/update-started.json")), None)
+    state = "idle"
+    if mark:
+        if vtuple(VERSION) != vtuple(mark.get("from")):
+            safe(lambda: os.remove(f"{DATA}/update-started.json"))  # the new version is running: done
+        else:
+            state = "updating" if time.time() - mark.get("at", 0) < UPDATE_STALE else "failed"
+    have, want = vtuple(VERSION), vtuple((rel or {}).get("tag"))
+    return {"version": VERSION, "latest": rel["tag"].lstrip("v") if rel else None, "available": bool(have and want and want > have), "url": rel["url"] if rel else "",
+            "notes": rel["notes"] if rel else "", "state": state, "log": update_log_tail() if state != "idle" else [], "helper": not CAPS.missing(["host_agent"]),
+            "to": (mark or {}).get("to") if state != "idle" else None}
+
 
 def register(app):
     host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
@@ -341,6 +387,25 @@ def register(app):
             return {"ok": True, "msg": "Restarting. Back in a few seconds.", "later": True}
         r = host_action("restart", n)
         return {"ok": bool(r.get("ok")), "msg": f"{mine.get(n) or app_name(n).split(' (')[0]} has been restarted." if r.get("ok") else f"Couldn't restart it: {r.get('msg')}"}
+
+    @router.get("/server/update")
+    def server_update(req):
+        return {"ok": True, **update_state(fresh=req.query.get("fresh") == "1")}
+
+    @router.post("/server/update")
+    def server_update_start(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):  # the settings PIN, when one is set, guards updating too
+            return bad
+        st = update_state()
+        if st["state"] == "updating":
+            return {"ok": False, "msg": "An update is already running."}, 409
+        if not st["available"]:
+            return {"ok": False, "msg": "You already have the newest version."}, 409
+        r = host_action("update")
+        if r.get("ok"):
+            json.dump({"from": VERSION, "to": st["latest"], "at": time.time()}, open(f"{DATA}/update-started.json", "w"))
+        return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
 
     @router.post("/server/gitsync")  # back up to GitHub now; answers with what the run did
     def server_gitsync(req):

@@ -285,6 +285,33 @@ class Basics(unittest.TestCase):
         self.assertTrue(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "whisper"})[1]["ok"])
         self.assertEqual(asked, [("add", "whisper")])
 
+    def test_update_card_compares_versions_and_starts_one_update_through_the_helper(self):
+        import json, tempfile
+        import modules.server as m
+        self.assertGreater(m.vtuple("v0.2.10"), m.vtuple("0.2.9"))
+        self.assertIsNone(m.vtuple("v1.0.0-rc1"))
+        d = tempfile.mkdtemp()
+        asked = []
+        rel = {"tag": "v0.2.0", "url": "https://github.com/x/y/releases/tag/v0.2.0", "notes": "n"}
+        self.patch(m, DATA=d, VERSION="0.1.0", latest_release=type("L", (), {"__call__": lambda self: rel, "clear": lambda self: None})(),
+                   host_action=lambda act, name="": asked.append(act) or {"ok": True, "msg": "update started"})
+        base = harness.start_api(self.bot)[1]
+        code, out = harness.call(base, "GET", "/server/update")
+        self.assertEqual((code, out["available"], out["latest"], out["state"]), (200, True, "0.2.0", "idle"))
+        self.assertTrue(harness.call(base, "POST", "/server/update", {})[1]["ok"])
+        self.assertEqual(asked, ["update"])
+        self.assertEqual(harness.call(base, "GET", "/server/update")[1]["state"], "updating")
+        self.assertEqual(harness.call(base, "POST", "/server/update", {})[0], 409)  # one at a time
+        json.dump({"from": "0.1.0", "to": "0.2.0", "at": m.time.time() - m.UPDATE_STALE - 1}, open(f"{d}/update-started.json", "w"))
+        self.assertEqual(harness.call(base, "GET", "/server/update")[1]["state"], "failed")
+        self.patch(m, VERSION="0.2.0")  # the new version is running: the marker clears and nothing is offered
+        out = harness.call(base, "GET", "/server/update")[1]
+        self.assertEqual((out["state"], out["available"]), ("idle", False))
+        self.assertEqual(harness.call(base, "POST", "/server/update", {})[0], 409)
+        self.patch(m, latest_release=lambda: None)  # offline or not public yet: no crash, nothing offered
+        out = harness.call(base, "GET", "/server/update")[1]
+        self.assertEqual((out["available"], out["latest"]), (False, None))
+
     def test_clocks_can_be_added_and_removed_live(self):
         import modules.clock as m
         before = list(m.CLOCKS)
