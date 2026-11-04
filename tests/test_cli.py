@@ -513,7 +513,7 @@ class Everyday(Base):
         self.fake.answers = ["wrong"]
         self.assertEqual(self.go("uninstall", "--purge", "--yes"), 1)  # --yes does not skip typing the name
         self.assertTrue(os.path.isdir(self.data))
-        self.fake.answers = [os.path.basename(self.home)]
+        self.fake.answers = [os.path.basename(self.home).lstrip(".")]  # the plain word, without the dot
         self.assertEqual(self.go("uninstall", "--purge"), 0, self.say())
         self.assertFalse(os.path.exists(self.data))
         self.assertFalse(os.path.exists(os.path.join(self.app, "stack", ".env")))
