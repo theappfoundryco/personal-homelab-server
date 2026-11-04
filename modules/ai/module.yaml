@@ -9,3 +9,4 @@ platforms: [linux, mac, wsl]
 settings: {}
 dashboard:
   home_cards: [ai_usage]
+  web: [view.js]  # AI usage at the end of Server and Apps

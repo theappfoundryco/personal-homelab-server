@@ -11,7 +11,7 @@ async function sgFetch(u, body) {
 }
 async function loadSG() {
   if (!SGD) $('#sg-body').innerHTML = '<div class="skel"></div><div class="skel"></div>';
-  try { [SGD, AID] = await Promise.all([sgFetch('/sg'), sgFetch('/sg/ai').catch(() => null)]); renderSG(); }
+  try { SGD = await sgFetch('/sg'); renderSG(); }
   catch { $('#sg-body').innerHTML = '<div class="err">Couldn’t load this right now. Try again in a minute.</div>'; }
 }
 // The tab shows your first name (from Settings, You), or User until you add one
@@ -51,8 +51,7 @@ function renderSG() {
   const listHTML = D.meds.length ? `<div class="label">Your medicines</div><div class="card sg-list">${D.meds.map((m) => `<button class="sg-row" data-sgedit="${esc(m.id)}">
       <span class="t"><b>${esc(m.name)}</b><small>${esc(sgPlan(m))}</small></span><span class="chev">${CHEV}</span></button>`).join('')}</div>` : '';
   const note = '<p class="hint">A tick-list to help you remember. It is not medical advice. Always follow your doctor’s instructions.</p>';
-  $('#sg-body').innerHTML = todayHTML + soonHTML + listHTML + note + '<div id="sg-ai"></div>';
-  renderAI();
+  $('#sg-body').innerHTML = todayHTML + soonHTML + listHTML + note;
 }
 
 // ---------- The sheet: add or change a medicine or an appointment ----------
@@ -157,20 +156,6 @@ async function sgSend(path, body) {
   catch (err) { sgErr(err.msg || 'That did not save. Try again.'); if (b) b.disabled = false; }
 }
 
-// ---------- SG: AI usage (tokens in and out of the local model, Monday to Sunday, days split at midnight, server time) ----------
-var AID = null;
-const aiAdd = (d, n) => { const x = sgDate(d); x.setDate(x.getDate() + n); return isoDay(x); };
-const tk = (n) => n >= 1e6 ? +(n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1e3 ? +(n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(Math.round(n));
-const aiSum = (ds, kind) => ds.reduce((a, d) => { for (const [k, v] of Object.entries(AID.days[d] || {})) if (!kind || k === kind) { a.in += v.in; a.out += v.out; a.calls += v.calls; } return a; }, { in: 0, out: 0, calls: 0 });
-function renderAI() {
-  if (!AID) { $('#sg-ai').innerHTML = '<div class="err">Couldn’t load AI usage right now. Try again in a minute.</div>'; return; }
-  const t = AID.today, mon = aiAdd(t, -((sgDate(t).getDay() + 6) % 7)), week = [...Array(7)].map((_, i) => aiAdd(mon, i)).filter((d) => d <= t);
-  const col = (a, n) => `<span><small>${a}</small><b class="num">${tk(n)}</b><small>${n.toLocaleString('en-IN')}</small></span>`;
-  const row = (a, x) => `<div><p>${a}</p>${col('In', x.in)}${col('Out', x.out)}</div>`;
-  $('#sg-ai').innerHTML = `<div class="label">AI usage<span class="lr">All models</span></div>
-    <div class="card ai-c3">${row(`So far, since ${sgShort(AID.first)}`, AID.total || aiSum(week))}</div>
-    <p class="hint ai-note">Tokens in and out. Days run midnight to midnight (server time). Open WebUI and n8n aren’t counted.</p>`;
-}
 $('#sg-body').addEventListener('click', async (e) => {
   const n = e.target.closest('[data-sgnew]'); if (n) return n.dataset.sgnew === 'appt' ? sgOpenAppt() : sgOpenMed();
   const ed = e.target.closest('[data-sgedit]'); if (ed) return sgOpenMed(SGD.meds.find((m) => m.id === ed.dataset.sgedit));
