@@ -55,6 +55,7 @@ make test-e2e                                     # dashboard smoke tests on dem
 make update-golden                                # re-record the golden API replies (review the git diff first)
 make update-baselines                             # re-record the phone-width screenshots (review them first)
 python3 demo/screenshots.py                        # re-record the README screenshots from demo data (needs playwright; review them first)
+python3 demo/readme_art.py                          # redraw the README banner and the GitHub social preview (same needs; upload the preview under Settings, General)
 ```
 
 The unit tests and `make check` run on both macOS and Linux. The maintainer has a private list of personal values (`.private/denylist.txt`). `make hooks` turns on maintainer mode when that file exists, and then the check is required. Contributors have no list and are covered by `scripts/check-personal.py` (emails and public IPs), gitleaks, the data guard and review.
