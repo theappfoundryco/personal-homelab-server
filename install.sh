@@ -210,6 +210,10 @@ link_plugins() { # Docker finds its plugins in ~/.docker/cli-plugins
   return 0
 }
 start_docker_mac() { # starts whichever Docker this Mac has, from the terminal
+  if ! command -v orbctl >/dev/null 2>&1 && ! command -v colima >/dev/null 2>&1 && [ ! -d /Applications/Docker.app ]; then  # a leftover docker command with nothing behind it would otherwise wait in silence
+    say "        There is a Docker command, but nothing to run it (no Docker Desktop, OrbStack or Colima). Installing Colima, a light one with no app to open."
+    install_docker_mac || return 1
+  fi
   if command -v orbctl >/dev/null 2>&1; then step "Starting Docker" "Docker started" orbctl start
   elif command -v colima >/dev/null 2>&1; then
     mem=$(( $(mac_memory_gb) / 2 )); [ "$mem" -gt 6 ] && mem=6; [ "$mem" -lt 2 ] && mem=2

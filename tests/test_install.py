@@ -160,6 +160,20 @@ class Installer(unittest.TestCase):
             self.assertTrue(os.path.islink(os.path.join(self.tmp, ".docker", "cli-plugins", pl)))
         self.assertIn("compose up", calls)
 
+    def test_a_mac_with_a_leftover_docker_command_and_nothing_to_run_it_gets_colima(self):
+        self.stub("brew", "colima", table=EXTRA)  # the docker command is there (a previous Colima was removed), but no Colima, OrbStack or Docker Desktop
+        for pl in ("docker-compose", "docker-buildx"):
+            path = os.path.join(self.tmp, "brew", "opt", pl, "bin", pl)
+            os.makedirs(os.path.dirname(path))
+            open(path, "w").write("#!/bin/sh\n")
+            os.chmod(path, 0o755)
+        rc, out = self.run_it("--no-open", FAKE_OS="Darwin", FAKE_RUNNING="1", HL_NAME="Sam")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("nothing to run it", out)
+        calls = self.calls()
+        self.assertIn("brew install colima", calls)
+        self.assertIn("colima start --cpu 4 --memory", calls)
+
     def test_a_stopped_docker_on_a_mac_is_started_from_the_terminal(self):
         self.stub("colima", table=EXTRA)
         rc, out = self.run_it("--no-open", FAKE_OS="Darwin", FAKE_RUNNING="1")
