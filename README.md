@@ -39,7 +39,8 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **Home** | A greeting, the weather, your day and tomorrow, a world clock, and **Brief me**: a short morning briefing with weather, your calendar, the news and a server recap. |
 | **Journal** | Write your day. Optionally get a private nightly summary, a mood score, a weekly recap and deeper insights, written by a model on your own machine. |
 | **Gym** | Log workouts, see your weekly streak, personal records, body weight and progress charts. |
-| **Health** | Add your medicines on your own schedule (every day at set times, every week, every 2 weeks or every month) and your appointments, then tick them off. Optional Telegram reminders with Done, 5 min and 15 min. The tab shows your first name. A tick-list for remembering, never medical advice. |
+| **Health** | Add your medicines on your own schedule (every day at set times, every week, every 2 weeks or every month) and your appointments, then tick them off. Pills left with a refill reminder, a month calendar of what was taken, quiet hours, and Telegram reminders with Done, 5 min and 15 min. The next medicine shows on Home. A tick-list for remembering, never medical advice. |
+| **Money** | One month at a time: your income and bills (with the day each is charged), what you spent, and what you can spend today. Every bill this month is counted from day one, and a quick **+ Spent** adjusts the days after. Names and amounts stay hidden until you tap Show. Monthly bills only for now. |
 | **Planner and notes** | Notes, one-off or repeating reminders, and long-term goals, in plain words. |
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
@@ -86,8 +87,8 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 
 - **Pinned.** Every Docker image is pinned to an exact version, and CI fails if one is not.
 - **Tested.** Over 340 automated tests, including recorded API replies, and a scan of every change for secrets, emails and public IP addresses.
-- **Safe updates.** When a new version is out, the dashboard shows what it brings (Security, New and Fixed) and updates with one tap, or run `homelab update`. Either way it takes a snapshot first and goes back by itself if anything fails.
-- **Backups in one command.** `homelab backup` saves your data and settings to one file, `homelab restore` brings it back. Backups are plain files, so keep them somewhere safe.
+- **Safe updates.** When a new version is out, the dashboard and Telegram show what it brings (Security, New and Fixed) and update with one tap, or run `homelab update`. Either way it takes a snapshot first and goes back by itself if anything fails.
+- **Backups every night.** Settings, Backups keeps the last 7 on this machine, copies them to your own drive or a synced folder (locked with a passphrase if you like), says plainly when the drive is not plugged in, and restores in one tap. A Telegram alert comes if a backup fails, the disk is nearly full or the assistant stops. `homelab backup` and `homelab restore` do the same from the terminal.
 - **Private by default.** The dashboard listens on this machine only until you open it to your network with a PIN. The only outside calls are for features you use, such as weather and news feeds.
 - **Open.** MIT licence, built in the open, and written so that one missing piece never takes the rest down.
 
@@ -147,7 +148,9 @@ Run `homelab help` for the rest.
 | Questions and ideas | [Discussions](https://github.com/theappfoundryco/personal-homelab-server/discussions) and Discord [#homelab](https://discord.gg/CtxC3ADy76) |
 | Bugs and feature requests | [Issues](https://github.com/theappfoundryco/personal-homelab-server/issues/new/choose) (remove personal information first) |
 | Security problems | Report privately, see [SECURITY.md](SECURITY.md) |
-| Build your own module | [docs/modules.md](docs/modules.md) |
+| Build your own module | [docs/modules.md](docs/modules.md), and modules others shared: [docs/community-modules.md](docs/community-modules.md) |
+| Make a release | [docs/RELEASING.md](docs/RELEASING.md) |
+| Test on real machines | [docs/TESTING.md](docs/TESTING.md) |
 
 ## Contribute
 

@@ -1,0 +1,51 @@
+name: Install test
+
+# Installs the project from scratch on fresh Linux machines (x64, and arm64 like a Raspberry Pi 4 or 5), waits for the dashboard to
+# answer its health check, then makes a backup, restarts and stops it. Real Docker, no fakes. Mac installs are checked by hand
+# (docs/TESTING.md): GitHub's Mac machines cannot run Docker.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"  # Mondays, to catch an image or a distribution that changed under us
+  pull_request:
+    paths: ["install.sh", "get.sh", "stack/**", "core/cli.py", "core/agent.py", ".github/workflows/install-test.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      HL_HOME: ${{ github.workspace }}/../hl-home
+    steps:
+      - uses: actions/checkout@v4
+      - name: install, answering yes and opening nothing
+        run: ./install.sh --yes --no-open < /dev/null
+      - name: the dashboard answers and is healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3095/api/bot/doctor -o doctor.json; then python3 -c "import json; d=json.load(open('doctor.json')); print('ok' if d.get('ok') else d)"; exit 0; fi
+            sleep 5
+          done
+          docker ps -a; docker logs telegram-bot | tail -50; exit 1
+      - name: the version it reports is the one in the files
+        run: |
+          want=$(python3 -c "import re; print(re.search(r'VERSION = \"([^\"]+)\"', open('core/version.py').read()).group(1))")
+          got=$(curl -fsS http://localhost:3095/api/bot/server/update | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
+          test "$want" = "$got"
+      - name: backup, restart, stop
+        run: |
+          bin/homelab backup
+          ls -l "$HL_HOME/backups"
+          bin/homelab restart
+          bin/homelab status
+          bin/homelab stop
+      - name: what happened, if it failed
+        if: failure()
+        run: tail -n 200 "$HL_HOME/install.log" || true

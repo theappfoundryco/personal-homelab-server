@@ -53,7 +53,7 @@ To try the installer from scratch as often as you like, use `scripts/dev-reset.s
 
 **Behaviour**
 - Refactors keep behaviour. The golden API tests and bot router tests decide. Keep them green.
-- Budget calculations are frozen. Moving code is fine. Open an issue first if you think one is wrong, and wait for the maintainer's yes.
+- Budget calculations (`modules/money/budget.py`, with `tests/test_money.py` as their contract) are frozen. Moving code is fine. Open an issue first if you think one is wrong, and wait for the maintainer's yes.
 - Optional features (Ollama, Whisper, Telegram, calendar, internet) must never crash when their dependency is missing. Show a clear message with a fix, never a raw traceback.
 - Pin every image to an exact version (`scripts/check-pins.py` enforces it). No `:latest`.
 - Do not add a new top-level dependency without a clear need. The only Python package today is PyYAML.
