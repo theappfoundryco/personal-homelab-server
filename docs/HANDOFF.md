@@ -14,7 +14,7 @@ A private, self-hosted assistant for the day: a dashboard (notes, journal, gym, 
 - Setup wizard on first run: name and time zone, machine, modules, AI engine, Telegram, access. Every step can be skipped.
 - Dashboard updates: Settings, Updates compares this version with the newest GitHub release (cached 10 minutes) and an Update now button asks the host helper to run `homelab update --yes`. The page polls until the new version answers, then reloads. The release lookup only works once the repository is public.
 - Custom apps: you can add your own Docker apps from Settings or the command line, each in its own compose project.
-- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by release-please, and images are built and signed by `images.yml`.
+- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by hand (see "Cut a release" below), and images are built and signed by `images.yml`. The Release workflow (release-please) is switched off because the organization does not let Actions open pull requests. Turn it on with `gh workflow enable Release` once that is allowed.
 
 ## Architecture map
 
@@ -60,6 +60,19 @@ python3 demo/readme_art.py                          # redraw the README banner a
 ```
 
 The unit tests and `make check` run on both macOS and Linux. The maintainer has a private list of personal values (`.private/denylist.txt`). `make hooks` turns on maintainer mode when that file exists, and then the check is required. Contributors have no list and are covered by `scripts/check-personal.py` (emails and public IPs), gitleaks, the data guard and review.
+
+## Cut a release
+
+Releases are manual for now. On `main` after the change is merged:
+
+```bash
+# 1. a pull request that sets VERSION in core/version.py and ".": in .release-please-manifest.json to the new number
+# 2. after it is merged, tag it
+git switch main && git pull
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`homelab update` (stable channel) and the dashboard's Updates page follow the newest `vX.Y.Z` tag, so the tag is what makes a release exist. Optionally add notes with `gh release create v0.2.0 --generate-notes`.
 
 ## What has been verified
 

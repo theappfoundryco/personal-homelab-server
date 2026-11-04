@@ -1,5 +1,7 @@
 name: Release
 
+# SWITCHED OFF in the repository (gh workflow disable Release): the organization does not allow Actions to open pull requests. Releases are cut by hand, see docs/HANDOFF.md.
+
 # Keeps a "release pull request" open on main with the next version and changelog (from commit messages that start with feat:, fix: and so on).
 # Merging it tags the version, writes the GitHub Release, and builds and signs the images for that version.
 on:
