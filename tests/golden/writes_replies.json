@@ -374,6 +374,7 @@
      "name": "Vitamin D",
      "next": "2026-11-03",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "08:00"
@@ -386,6 +387,7 @@
      "name": "Iron",
      "next": "2026-11-03",
      "remind": false,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "14:00"
@@ -398,6 +400,7 @@
      "name": "Magnesium",
      "next": "2026-11-03",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "22:00"
@@ -410,6 +413,7 @@
      "name": "Demo weekly dose",
      "next": "2026-11-09",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "stop_after": 6,
      "times": [
@@ -424,6 +428,7 @@
      "name": "Demo shot",
      "next": "2026-11-09",
      "remind": false,
+     "runs_out": null,
      "start": "2026-11-09",
      "times": [
       "10:00"
@@ -437,6 +442,7 @@
      "name": "Demo monthly dose",
      "next": "2026-11-05",
      "remind": false,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "09:00"
@@ -444,6 +450,11 @@
     }
    ],
    "ok": true,
+   "quiet": {
+    "from": "22:30",
+    "on": false,
+    "to": "07:00"
+   },
    "telegram": true,
    "today": "2026-11-03"
   },
@@ -578,6 +589,7 @@
      "name": "Vitamin D",
      "next": "2026-11-03",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "08:00"
@@ -590,6 +602,7 @@
      "name": "Iron",
      "next": "2026-11-03",
      "remind": false,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "14:00"
@@ -602,6 +615,7 @@
      "name": "Magnesium",
      "next": "2026-11-03",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "22:00"
@@ -614,6 +628,7 @@
      "name": "Demo weekly dose",
      "next": "2026-11-09",
      "remind": true,
+     "runs_out": null,
      "start": "2026-10-20",
      "stop_after": 6,
      "times": [
@@ -628,6 +643,7 @@
      "name": "Demo shot",
      "next": "2026-11-09",
      "remind": false,
+     "runs_out": null,
      "start": "2026-11-09",
      "times": [
       "10:00"
@@ -641,6 +657,7 @@
      "name": "Demo monthly dose",
      "next": "2026-11-05",
      "remind": false,
+     "runs_out": null,
      "start": "2026-10-20",
      "times": [
       "09:00"
@@ -648,6 +665,11 @@
     }
    ],
    "ok": true,
+   "quiet": {
+    "from": "22:30",
+    "on": false,
+    "to": "07:00"
+   },
    "telegram": true,
    "today": "2026-11-03"
   },

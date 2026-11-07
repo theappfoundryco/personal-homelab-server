@@ -136,7 +136,7 @@ from modules.briefing import BRIEF_NEWS, LAST_BRIEF, build_briefing, full_briefi
 
 
 # ================================================================ server (moved to modules/server/)
-from modules.server import TEMP, app_buttons, containers, daily, find_app, free_ai_memory, host_action, logs, one, restart_app, server, unload_ai
+from modules.server import TEMP, app_buttons, check_update, containers, daily, find_app, free_ai_memory, host_action, logs, one, restart_app, server, start_update, unload_ai
 
 
 # ================================================================ planner (moved to modules/planner/)

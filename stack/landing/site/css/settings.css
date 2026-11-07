@@ -53,3 +53,9 @@
 .sgo .chev { flex: none; color: var(--faint); }
 .sgo .chev svg { display: block; width: var(--g-sm); height: var(--g-sm); }
 .sfoot { margin: var(--sp-6) 0 var(--sp-4); text-align: center; font-size: var(--t-sm); color: var(--faint); }
+.sgap { margin-top: var(--sp-4); }  /* a card that follows buttons */
+/* Backups: two small controls in one row, and text buttons that sit at the end of a row */
+.bk-two { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); color: var(--muted); font-size: var(--t-md); }
+.bk-two label { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.bk-two select { height: var(--h-btn-sm); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: var(--raised); color: var(--text); font: inherit; }
+.bk-link { flex: none; margin-left: auto; height: var(--h-btn-sm); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: var(--raised); color: var(--text); font-size: var(--t-md); font-weight: 600; }

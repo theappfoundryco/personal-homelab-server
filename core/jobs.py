@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from core import host
 from core.helpers import cached, now, safe, t12
 
-NEEDS = ("TZ", "send", "NEWS_AT", "BRIEF_AT", "JOURNAL_AT", "JOURNAL_ON", "INSIGHTS_ON", "EVENING_ON", "WEEKLY_ON", "EVENING_AT", "RECAP_START", "RECAP_SHOW", "feature", "state", "once", "claim", "claimed_run", "write_json", "location", "flights", "travel_fx", "nice_when", "day_events", "gmail_cached", "fire_reminders", "check_journal", "check_server", "check_sg", "check_meds", "refresh_location", "warm_briefing", "ai_warm", "refresh_digests", "run_job", "scheduled_briefing", "evening", "journal_work", "journal_morning_run", "insights_due", "recap_due", "weekly", "run_prune", "check_f1", "check_flights")
+NEEDS = ("TZ", "send", "NEWS_AT", "BRIEF_AT", "JOURNAL_AT", "JOURNAL_ON", "INSIGHTS_ON", "EVENING_ON", "WEEKLY_ON", "EVENING_AT", "RECAP_START", "RECAP_SHOW", "feature", "state", "once", "claim", "claimed_run", "write_json", "location", "flights", "travel_fx", "nice_when", "day_events", "gmail_cached", "fire_reminders", "check_journal", "check_server", "check_sg", "check_meds", "check_update", "refresh_location", "warm_briefing", "ai_warm", "refresh_digests", "run_job", "scheduled_briefing", "evening", "journal_work", "journal_morning_run", "insights_due", "recap_due", "weekly", "run_prune", "check_f1", "check_flights")
 
 DATA = os.environ.get("HL_DATA", "/data")
 ALIVE_FILE = f"{DATA}/alive"  # the time, every minute: after a restart it says when the bot went down
@@ -80,6 +80,7 @@ def scheduler():
             if every("server", 60): check_server()
             if every("sg", 300): check_sg()
             if every("meds", 20): check_meds()
+            if every("update", 3600): check_update()  # Telegram, once per new version
             if every("location", 600): refresh_location()
             if every("extras", 600): write_extras()
             if every("alive", 60): safe(lambda: write_json(ALIVE_FILE, time.time()))

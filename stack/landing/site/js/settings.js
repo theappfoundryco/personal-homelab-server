@@ -4,7 +4,7 @@
 const SET = { data: null, page: 'root', pin: '', note: '', restart: false };
 try { SET.pin = sessionStorage.getItem('spin') || ''; } catch (e) {}
 const setHome = () => $('#set-body');
-const SET_TITLES = { profile: 'You', about: 'About', root: 'Settings', modules: 'Modules', layout: 'Menu and home', tiles: 'Your tiles', all: 'All settings', security: 'Security', health: 'Health check', apps: 'Apps', news: 'News and briefing', schedule: 'Schedule', update: 'Updates' };
+const SET_TITLES = { profile: 'You', about: 'About', root: 'Settings', modules: 'Modules', layout: 'Menu and home', tiles: 'Your tiles', all: 'All settings', security: 'Security', health: 'Health check', apps: 'Apps', news: 'News and briefing', schedule: 'Schedule', update: 'Updates', backups: 'Backups' };
 const SET_GROUPS = { owner: 'You', timezone: 'Time', home: 'Home', dashboard_url: 'Links', world_clock: 'World clock', schedule: 'Schedule', models: 'AI models',
   features: 'Features', support: 'Support', therapy: 'Journal', ollama: 'AI engine' };
 const SET_LABELS = { 'owner.name': 'Your name', timezone: 'Timezone', 'home.city': 'Home city', 'home.country': 'Country', 'home.lat': 'Latitude', 'home.lon': 'Longitude',
@@ -13,7 +13,7 @@ const SET_LABELS = { 'owner.name': 'Your name', timezone: 'Timezone', 'home.city
   'models.claude_news': 'Claude news model', 'features.therapy_recap': 'Weekly journal summary', 'support.therapist': 'Therapist name', 'support.helpline_name': 'Helpline name',
   'support.helpline_tel': 'Helpline number', 'therapy.calendar_words': 'Words that mark a therapy session in your calendar', 'ollama.url': 'Where the AI engine runs' };
 const SET_KEYS = { flag: 'Flag (an emoji)', label: 'City name', tz: 'Time zone, like Europe/London' };
-const HOME_CARDS = [['weather', 'Weather'], ['brief', 'Briefing button'], ['shortcuts', 'News and Planner buttons'], ['today', 'Your day'], ['clocks', 'World clock']];
+const HOME_CARDS = [['weather', 'Weather'], ['brief', 'Briefing button'], ['shortcuts', 'News and Planner buttons'], ['meds', 'Next medicine'], ['today', 'Your day'], ['clocks', 'World clock']];
 const TAB_NAMES = { home: 'Home', journal: 'Journal', gym: 'Gym', sg: 'Health', server: 'Server and apps' };
 
 async function setApi(path, body) {
@@ -60,6 +60,7 @@ async function setRender() {
   else if (SET.page === 'health') await setHealthPage(body);
   else if (SET.page === 'apps') await setAppsPage(body);
   else if (SET.page === 'update') await setUpdatePage(body);
+  else if (SET.page === 'backups') await setBackupsPage(body);
   else if (SET.page === 'news') await setNewsPage(body, note);
   else if (SET.page === 'schedule') await setSchedPage(body, note);
   else if (SET.page === 'security') {
@@ -73,7 +74,7 @@ async function setRender() {
 // ---------- The first page: four groups, each row saying how it is set right now ----------
 const SITE = 'https://theappfoundry.co/homelab';
 async function setRootPage(body, d, note) {
-  const [st, cat, sch, nw, acc, upd] = await Promise.all(['/setup', '/server/catalog', '/schedule', '/news/setup', '/setup/access', '/server/update'].map((p) => setApi(p).catch(() => ({}))));
+  const [st, cat, sch, nw, acc, upd, bk] = await Promise.all(['/setup', '/server/catalog', '/schedule', '/news/setup', '/setup/access', '/server/update', '/server/backups'].map((p) => setApi(p).catch(() => ({}))));
   if (SET.page !== 'root') return;
   SET.setup = st.ok ? st : null;
   const f = (p) => (d.fields.find((x) => x.path === p) || {}).value;
@@ -93,7 +94,7 @@ async function setRootPage(body, d, note) {
     + group('Apps and AI', [row('apps', 'Apps', cat.ok ? (added.length ? `${added.length} added: ${added.slice(0, 3).map((a) => a.title.split(' (')[0]).join(', ')}${added.length > 3 ? '\u2026' : ''}` : 'Nothing extra yet') : 'Add or remove apps'),
       row('', 'AI engine', engine, 'data-wiz-step="ai"'), row('', 'Telegram', st.ok ? (st.telegram.connected ? 'Connected' : 'Not connected') : 'Chat from your phone', 'data-wiz-step="telegram"')])
     + group('System', [row('', 'Who can open the dashboard', access, 'data-wiz-step="access"'), row('health', 'Health check', 'What works and what to fix'), row('all', 'All settings', 'Every value, for fine-tuning'),
-      row('update', 'Updates', upd.ok ? (upd.state === 'updating' ? 'Updating now' : upd.available ? `Version ${upd.latest} is ready` : `Up to date, version ${upd.version}`) : 'Check for a newer version'), row('', 'Run setup again', 'The guided steps from the start', 'data-wiz'), row('about', 'About', st.version ? 'Version ' + st.version : 'Version, privacy and terms')])
+      row('backups', 'Backups', bkLine(bk)), row('update', 'Updates', upd.ok ? (upd.state === 'updating' ? 'Updating now' : upd.available ? `Version ${upd.latest} is ready` : `Up to date, version ${upd.version}`) : 'Check for a newer version'), row('', 'Run setup again', 'The guided steps from the start', 'data-wiz'), row('about', 'About', st.version ? 'Version ' + st.version : 'Version, privacy and terms')])
     + `<button class="sbtn danger" id="set-reset">Reset everything to defaults</button>`;
 }
 function setProfilePage(body, note) {
@@ -115,6 +116,102 @@ function setAboutPage(body) {
     ${HL_CLI.startsWith('bin/') ? `<div class="snote">Run these in the project folder. To type just <b>homelab</b> from any folder:${cmdHTML(hlCmd('path add'))}</div>` : ''}
     <section class="card srows">${link('', 'Website', 'theappfoundry.co/homelab')}${link('/privacy', 'Privacy', 'What stays on this machine, and what does not')}${link('/terms', 'Terms', 'The terms for using Homelab')}</section>
     <p class="sfoot">\u00a9 ${new Date().getFullYear()} TheAppFoundryCo</p>`;
+}
+// ---------- Backups: every night on this machine, a copy on your own drive, locked if you like, and restore ----------
+const BK_KIND = { nightly: 'Every night', backup: 'Made by you', snapshot: 'Before an update', 'before-restore': 'Before a restore' };
+const bkWhen = (t) => { const d = new Date(t * 1000), days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+  const at = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+  return days === 0 ? `Today at ${at}` : days === 1 ? `Yesterday at ${at}` : `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${at}`; };
+const bkSize = (b) => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
+function bkLine(bk) {
+  if (!bk || !bk.ok) return 'Copies of your data';
+  const last = bk.status?.last;
+  if (last && !last.ok) return 'The last backup did not work';
+  if (last?.at) return `Last one ${bkWhen(last.at).replace(/^T/, 't').replace(/^Y/, 'y')}`;
+  return bk.night.backup ? 'Every night' : 'Off';
+}
+const BK_STATE = { ok: ['ok', 'Copied'], ready: ['ok', 'Ready'], missing: ['warn', 'Drive not plugged in'], blocked: ['bad', 'Blocked by macOS'], denied: ['bad', 'No permission'],
+  full: ['bad', 'Drive full'], inside: ['bad', 'Not a safe place'], notdir: ['bad', 'Not a folder'], nolock: ['bad', 'Cannot lock'], failed: ['bad', 'Did not finish'] };
+let bkPoll = null;
+async function setBackupsPage(body) {
+  clearTimeout(bkPoll); bkPoll = null;
+  const r = await setApi('/server/backups');
+  if (SET.page !== 'backups') return;
+  if (!r.ok) { body.innerHTML = '<div class="err">Backups can’t be reached right now.</div>'; return; }
+  SET.bk = r;
+  const st = r.status || {}, last = st.last, n = r.night, off = st.offsite || { state: n.offsite_to ? 'ready' : 'off', to: n.offsite_to };
+  if (!r.helper) {
+    body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot off" aria-hidden="true"></i><span><b>Backups need the host helper</b><small>It is the small program that runs backups on this machine and copies them to your drive.</small></span></div></section>
+      <div class="snote">${hlRunIn()} this once:${cmdHTML(hlCmd('agent install'))}Or make a backup by hand any time:${cmdHTML(hlCmd('backup'))}</div>`;
+    return;
+  }
+  const head = last ? (last.ok ? ['ok', `Last backup: ${bkWhen(last.at)}`, `${bkSize(last.size)}, ${BK_KIND[last.kind === 'manual' ? 'backup' : 'nightly']}. Saved in ~/.homelab/backups.`]
+      : ['bad', 'The last backup did not work', last.msg || 'Try Back up now. If it fails again, run homelab backup in the terminal to see why.'])
+    : ['off', 'No backup yet', 'Make the first one now. It takes a few seconds.'];
+  const next = n.backup ? `Next: every night at ${esc(n.backup_at)}` : 'Nightly backups are off';
+  const [cls, label] = BK_STATE[off.state] || ['off', 'Not set'];
+  const offNow = off.state === 'ok' && off.at ? `${label} ${bkWhen(off.at).replace(/^T/, 't').replace(/^Y/, 'y')}${off.encrypted ? ', locked' : ''}` : label;
+  const drives = (st.drives || []).filter((d) => !off.to || !off.to.startsWith(d.path));
+  const lockOn = !!st.passphrase;
+  const pickLock = SET.bkLock && !lockOn;
+  body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot ${head[0]}" aria-hidden="true"></i><span><b>${esc(head[1])}</b><small>${esc(head[2])}</small><small>${esc(next)}</small></span></div></section>
+    <button class="sbtn main" data-bk="now"${SET.bkBusy ? ' disabled' : ''}>${SET.bkBusy ? 'Backing up…' : 'Back up now'}</button>
+
+    <div class="sgroup">Every night</div>
+    <section class="card srows"><div class="srow"><span><b>Back up every night</b><small>Your data and settings, kept on this machine</small></span>${swHTML(n.backup, 'bk-night', 'Back up every night')}</div>
+      ${n.backup ? `<div class="srow bk-two"><label>At <input class="ntime" type="time" data-bk-at value="${esc(to24(n.backup_at) || '03:30')}"></label><label>Keep the last <select data-bk-keep>${[3, 7, 14, 30].map((k) => `<option${k === +n.backup_keep ? ' selected' : ''}>${k}</option>`).join('')}</select></label></div>` : ''}</section>
+
+    <div class="sgroup">A copy on another drive</div>
+    <section class="card srows">${off.to ? `<div class="srow"><i class="sdot ${cls}" aria-hidden="true"></i><span><b>${esc(off.to)}</b>${['ok', 'ready'].includes(off.state) || !off.msg ? `<small>${esc(off.state === 'ready' ? off.msg : offNow)}</small>` : `<small class="${cls === 'bad' ? 'warnline' : ''}">${esc(off.msg)}</small>`}</span></div>
+        <div class="srow bk-two"><label>Keep the last <select data-bk-okeep>${[3, 7, 14, 30].map((k) => `<option${k === +n.offsite_keep ? ' selected' : ''}>${k}</option>`).join('')}</select></label><button class="bk-link" data-bk="stop">Stop copying</button></div>`
+      : `<div class="srow"><span><b>Keep a copy somewhere else</b><small>If this machine breaks, its backups go with it. Pick an external drive, a NAS, or a folder that syncs (iCloud Drive, Dropbox).</small></span></div>`}
+      ${drives.map((d) => `<button class="srow sgo" data-bk-drive="${esc(d.path)}"><span><b>Use ${esc(d.name)}</b><small>${bkSize(d.free)} free</small></span><span class="chev">${CHEV}</span></button>`).join('')}
+      <div class="srow"><span><b>${drives.length ? 'Plugged in a drive?' : 'No drives found'}</b><small>Plug it in, then look again</small></span><button class="bk-link" data-bk="drives">Look for drives</button></div></section>
+    <label class="sfield"><span>Or type a folder</span><input data-bk-path spellcheck="false" autocapitalize="off" placeholder="/Volumes/Backup/Homelab or ~/Dropbox/Homelab" value="${esc(SET.bkPath ?? '')}"></label>
+    <button class="sbtn" data-bk="path">Use this folder</button>
+
+    <div class="sgroup">Lock the copies</div>
+    <section class="card srows"><div class="srow"><span><b>Lock with a passphrase</b><small>${lockOn ? 'On. Copies on your drive can only be opened with your passphrase.' : pickLock ? 'Choose a passphrase below.' : 'Off. Anyone with the drive can open the copies.'}</small></span>${swHTML(lockOn || pickLock, 'bk-lock', 'Lock with a passphrase')}</div></section>
+    ${pickLock ? `<div class="snote"><b>If you forget the passphrase, nobody can open these copies, not even you.</b> Write it down somewhere safe.</div>
+      <label class="sfield"><span>Passphrase (8 or more characters)</span><input type="password" data-bk-p1 autocomplete="new-password"></label>
+      <label class="sfield"><span>Type it again</span><input type="password" data-bk-p2 autocomplete="new-password"></label>
+      <div class="sfield bad"><div class="why" id="bk-why"></div></div><button class="sbtn main" data-bk="lock">Lock the copies</button>` : ''}
+
+    ${r.telegram ? `<div class="sgroup">Alerts</div><section class="card srows"><div class="srow"><span><b>Tell me on Telegram when something goes wrong</b><small>A backup that failed, the drive not plugged in, the disk nearly full, or the assistant stopping. At most once a day each.</small></span>${swHTML(n.alerts, 'bk-alerts', 'Alerts on Telegram')}</div>
+      ${st.disk ? `<div class="srow"><span><b>This machine's disk</b><small>${st.disk.pct}% used, ${bkSize(st.disk.free)} free</small></span></div>` : ''}</section>` : ''}
+
+    <div class="sgroup">Restore</div>
+    <section class="card srows">${(st.list || []).slice(0, 10).map((b) => `<div class="srow"><span><b>${esc(bkWhen(b.at))}</b><small>${esc(BK_KIND[b.kind] || 'Backup')}, ${bkSize(b.size)}</small></span><button class="bk-link" data-bk-restore="${esc(b.name)}">Restore</button></div>`).join('')
+      || '<div class="srow"><span><small>No backups on this machine yet.</small></span></div>'}</section>
+    <p class="hint">Restore puts your data and settings back as they were then. A copy of how things are now is made first, so it can be undone. Copies on another drive can be restored from the terminal: ${esc(hlCmd('restore <file>'))}</p>`;
+  if (SET.bkBusy) bkPoll = setTimeout(() => SET.page === 'backups' && setBackupsPage(setHome()), 3000);
+}
+async function bkSet(ch) {
+  const r = await setApi('/server/backups/settings', ch);
+  if (!r.ok) toast(r.msg || r.error || 'That did not save.');
+  return setBackupsPage(setHome());
+}
+async function bkAct(t) {
+  const a = t.dataset.bk;
+  if (a === 'now') {
+    const before = SET.bk?.status?.last?.at || 0;
+    SET.bkBusy = true; setBackupsPage(setHome());
+    const r = await setApi('/server/backups/now', {});
+    if (!r.ok) { SET.bkBusy = false; toast(r.msg || 'The backup did not start.'); return setBackupsPage(setHome()); }
+    for (let i = 0; i < 40; i++) { await new Promise((ok) => setTimeout(ok, 3000)); const s = await setApi('/server/backups').catch(() => ({})); if ((s.status?.last?.at || 0) > before) break; }
+    SET.bkBusy = false; return setBackupsPage(setHome());
+  }
+  if (a === 'drives') { t.textContent = 'Looking…'; await setApi('/server/backups/drives', {}); return setBackupsPage(setHome()); }
+  if (a === 'stop') { if (await confirmSheet({ title: 'Stop copying to this drive?', text: 'Copies already there stay there.', ok: 'Stop copying' })) return bkSet({ offsite_to: '' }); return; }
+  if (a === 'path') { const v = (document.querySelector('[data-bk-path]').value || '').trim(); if (!v) return toast('Type a folder first.'); SET.bkPath = ''; return bkSet({ offsite_to: v }); }
+  if (a === 'lock') {
+    const p1 = document.querySelector('[data-bk-p1]').value, p2 = document.querySelector('[data-bk-p2]').value, why = $('#bk-why');
+    if (p1.length < 8) { why.textContent = 'Use 8 or more characters.'; return; }
+    if (p1 !== p2) { why.textContent = 'The two do not match.'; return; }
+    const r = await setApi('/server/backups/passphrase', { passphrase: p1 });
+    if (!r.ok) { why.textContent = r.msg || 'That did not save.'; return; }
+    SET.bkLock = false; return setBackupsPage(setHome());
+  }
 }
 // ---------- Updates: the newest release, and one button that runs the same safe update as the terminal ----------
 let updPoll = null;
@@ -138,7 +235,9 @@ async function setUpdatePage(body) {
   else head = ['off', 'Can\u2019t reach the release list', `You have ${esc(r.version)}. Check your connection, or run the update check in the terminal.`], act = cmdHTML(hlCmd('update --check'));
   const notes = r.ok && r.available && !busy ? `<div class="sgroup">New in ${esc(r.latest)}</div><section class="card upd-notes">${updNotesHTML(r.notes)}</section>` : '';
   body.innerHTML = `<section class="card srows"><div class="srow"><i class="sdot ${head[0]}" aria-hidden="true"></i><span><b>${head[1]}</b><small>${head[2]}</small></span></div>${r.available ? news : ''}</section>`
-    + notes + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button><div id="upd-hist"></div>`);
+    + notes + log + act + (busy ? '' : `<button class="sbtn" data-upd="check">Check now</button>`)
+    + (r.ok && r.telegram && !busy ? `<section class="card srows sgap"><div class="srow"><span><b>Tell me on Telegram</b><small>When a new version is out, with what it brings and an Update now button</small></span>${swHTML(r.prefs && r.prefs.telegram, 'upd-tg', 'Tell me on Telegram')}</div></section>` : '')
+    + (busy ? '' : '<div id="upd-hist"></div>');
   if (busy) { updPoll = setTimeout(() => SET.page === 'update' && setUpdatePage(setHome()), 4000); return; }
   const h = await setApi('/server/update/history').catch(() => ({}));  // past releases, each with its notes
   if (SET.page !== 'update' || !$('#upd-hist') || !h.ok || !(h.releases || []).length) return;
@@ -223,8 +322,7 @@ async function setSchedPage(body, note) {
   SET.sched = r.jobs;
   const row = (j) => `<div class="srow sch"><span><b>${esc(j.title)}</b><small>${esc(j.what)}</small>${j.every ? `<small>${esc(j.every)}</small>` : ''}${j.blocked && j.on ? `<small class="warnline">${esc(j.blocked)}</small>` : ''}
       ${j.time ? `<label class="sinline"${j.on ? '' : ' hidden'} data-sch-for="${j.id}">Time <input class="ntime" type="time" data-sch-time="${esc(j.time)}" value="${j.at24}"></label>` : ''}
-      ${j.id === 'backup' ? `<div data-sch-for="backup"${j.on ? '' : ' hidden'}><label class="sfield"><span>Folder on this machine (empty: the backups folder in ~/.homelab)</span><input data-sch-text="night.backup_to" spellcheck="false" value="${esc(j.extra.backup_to)}" placeholder="~/.homelab/backups"></label>
-        <label class="sfield"><span>How many to keep</span><input data-sch-num="night.backup_keep" type="number" min="1" max="60" value="${esc(j.extra.backup_keep)}"></label></div>` : ''}
+      ${j.id === 'backup' ? `<small data-sch-for="backup"${j.on ? '' : ' hidden'}>Where they go, how many to keep and a copy on another drive: Settings, Backups.</small>` : ''}
       ${j.id === 'github' ? `<div data-sch-for="github"${j.on ? '' : ' hidden'}><label class="sfield"><span>Your private repository</span><input data-sch-text="night.github_repo" spellcheck="false" value="${esc(j.extra.github_repo)}" placeholder="git@github.com:you/homelab-settings.git"></label>
         <small>Make an empty private repository, then add this machine's SSH public key to it with write access (GitHub: the repository, Settings, Deploy keys). Nothing else is needed.</small></div>` : ''}
     </span>${swHTML(j.on, 'sch:' + j.id, j.title)}</div>`;
@@ -404,6 +502,27 @@ $('#set-back').onclick = () => { SET.news = null; SET.prof = false; if (SET.page
 $('#set-body').addEventListener('click', async (e) => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.upd) return updAct(t.dataset.upd);
+  if (t.dataset.bk) return bkAct(t);
+  if (t.dataset.bkDrive) return bkSet({ offsite_to: t.dataset.bkDrive + '/Homelab backups' });
+  if (t.dataset.bkRestore) {
+    const b = (SET.bk?.status?.list || []).find((x) => x.name === t.dataset.bkRestore);
+    if (!b || !await confirmSheet({ title: 'Restore this backup?', text: `Your data and settings go back to ${bkWhen(b.at)}. A copy of how things are now is made first. The dashboard is away for about a minute.`, ok: 'Restore' })) return;
+    const r = await setApi('/server/backups/restore', { name: b.name });
+    if (!r.ok) return toast(r.msg || 'The restore did not start.');
+    $('#set-body').innerHTML = '<section class="card srows"><div class="srow"><i class="sdot warn"></i><span><b>Restoring…</b><small>The dashboard comes back by itself in about a minute.</small></span></div></section>';
+    for (let i = 0; i < 60; i++) { await new Promise((ok) => setTimeout(ok, 4000)); try { const x = await fetch('/api/bot/server/backups', { cache: 'no-store' }); if (x.ok && i > 2) { location.reload(); return; } } catch (err) {} }
+    return;
+  }
+  if (t.dataset.sw === 'bk-night') return bkSet({ backup: t.getAttribute('aria-checked') !== 'true' });
+  if (t.dataset.sw === 'bk-alerts') return bkSet({ alerts: t.getAttribute('aria-checked') !== 'true' });
+  if (t.dataset.sw === 'bk-lock') {
+    if (t.getAttribute('aria-checked') === 'true' && SET.bk?.status?.passphrase) {
+      if (!await confirmSheet({ title: 'Stop locking copies?', text: 'New copies will not be locked. Copies already locked still need the passphrase.', ok: 'Stop locking' })) return;
+      await setApi('/server/backups/passphrase', { passphrase: '' }); return setBackupsPage(setHome());
+    }
+    SET.bkLock = !SET.bkLock; return setBackupsPage(setHome());
+  }
+  if (t.dataset.sw === 'upd-tg') { const on = t.getAttribute('aria-checked') !== 'true'; t.setAttribute('aria-checked', on); const r = await setApi('/server/update/prefs', { telegram: on }); if (!r.ok) { t.setAttribute('aria-checked', !on); toast('That did not save.'); } return; }
   if (t.dataset.appAdd) return appsChange('add', t.dataset.appAdd);
   if (t.dataset.appRm) { if (await confirmSheet({ title: 'Remove this app?', text: 'Its data is kept, so adding it again picks up where it was.', ok: 'Remove' })) appsChange('remove', t.dataset.appRm); return; }
   if (t.dataset.nw) return newsAct(t);
@@ -484,3 +603,11 @@ async function showNeeds() {
   const hide = $('#needs-hide');
   if (hide) hide.onclick = () => { need.forEach((c) => off.push(c.name)); try { localStorage.setItem('needs-off', JSON.stringify(off)); } catch (e) {} box.innerHTML = ''; };
 }
+// Backups: the time and how many to keep save as soon as they change
+$('#set-body').addEventListener('change', (e) => {
+  if (SET.page !== 'backups') return;
+  const t = e.target;
+  if (t.matches('[data-bk-at]') && t.value) bkSet({ backup_at: to12(t.value) });
+  else if (t.matches('[data-bk-keep]')) bkSet({ backup_keep: +t.value });
+  else if (t.matches('[data-bk-okeep]')) bkSet({ offsite_keep: +t.value });
+});

@@ -120,6 +120,11 @@ def build(out, today, seed=42):
     log = {d.isoformat(): {"m1@0800": r.random() < 0.8, "m3@2200": r.random() < 0.6} for d in days[-14:]}
     dump(f"{out}/sg.json", {"meds": meds, "log": log,
                             "health": [{"id": "appt1", "name": "Demo check-up", "due": (today + timedelta(days=20)).isoformat(), "why": "yearly"}]})
+    # money: an invented month, in US dollars, with a few things spent
+    dump(f"{out}/money.json", {"currency": "USD", "income": [{"id": "i1", "name": "Salary", "amount": 480000}, {"id": "i2", "name": "Freelance", "amount": 40000}],
+                               "bills": [{"id": "b1", "name": "Rent", "amount": 180000, "day": 1}, {"id": "b2", "name": "Phone", "amount": 4500, "day": 8},
+                                         {"id": "b3", "name": "Music", "amount": 1099, "day": 14}, {"id": "b4", "name": "Gym", "amount": 4000, "day": 28}],
+                               "spent": {f"{today:%Y-%m}": [{"id": "s1", "amount": 2350, "note": "Lunch", "day": 1}, {"id": "s2", "amount": 6420, "note": "Groceries", "day": max(1, today.day - 1)}]}})
     dump(f"{out}/planner-past.json", {})
     return out
 

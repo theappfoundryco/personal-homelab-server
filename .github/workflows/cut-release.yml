@@ -1,0 +1,53 @@
+name: Cut release
+
+# A release exists once main's core/version.py names a version that has no tag yet. Then this tags that commit, writes the
+# GitHub Release with notes in three kinds (Security, New, Fixed) from the commit sentences since the last release, and builds
+# the images. Nobody types git tag. Raise VERSION in a pull request; merging it is the release. See docs/RELEASING.md.
+on:
+  push:
+    branches: [main]
+    paths: ["core/version.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      new: ${{ steps.check.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        run: python3 scripts/release.py check >> "$GITHUB_OUTPUT"
+      - name: tag and write the release
+        if: ${{ steps.check.outputs.new == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
+          python3 scripts/release.py notes "$TAG" > notes.md
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
+
+  images:
+    needs: release
+    if: ${{ needs.release.outputs.new == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/images.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}

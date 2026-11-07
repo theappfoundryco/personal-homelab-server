@@ -153,6 +153,24 @@ class Backups(Base):
         self.assertIn("compose stop landing telegram-bot docker-proxy", self.fake.calls)
         self.assertIn("compose up -d --build landing telegram-bot docker-proxy", self.fake.calls)
 
+    @unittest.skipUnless(shutil.which("openssl"), "openssl is not here")
+    def test_a_locked_copy_from_your_drive_restores_with_the_saved_passphrase(self):
+        from core import backups
+        if not backups.can_lock():
+            self.skipTest("this openssl cannot lock")
+        self.go("backup")
+        plain = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])
+        backups.set_passphrase(self.home, "a long passphrase")
+        locked = os.path.join(self.tmp, os.path.basename(plain) + ".enc")
+        self.assertTrue(backups.lock(plain, locked, os.path.join(self.home, backups.PASSFILE)))
+        open(os.path.join(self.data, "journal", "a.json"), "w").write('{"entry": "ruined"}')
+        self.assertEqual(self.go("restore", locked, "--yes"), 0, self.say())
+        self.assertEqual(json.load(open(os.path.join(self.data, "journal", "a.json"))), {"entry": "original"})
+        self.assertFalse([f for f in os.listdir(self.home) if f.startswith("unlocked-")])  # the unlocked file is not left behind
+        backups.set_passphrase(self.home, "the wrong one now")
+        self.assertEqual(self.go("restore", locked, "--yes"), 1)
+        self.assertIn("Could not unlock", self.say())
+
     def test_restore_asks_first_and_cancel_changes_nothing(self):
         self.go("backup")
         path = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])
@@ -247,6 +265,39 @@ class Updates(Base):
         ups = [i for i, c in enumerate(self.fake.calls) if "up -d" in c]
         self.assertTrue(stops and ups and stops[0] < ups[0])
         self.assertIn("Updated to", self.say())
+
+    def test_an_update_restarts_without_rebuilding_unless_the_image_changed(self):
+        self.publish("v1.0.0", "code only")
+        self.assertEqual(self.go("update", "--yes"), 0, self.say())
+        self.assertFalse([c for c in self.fake.calls if "--build" in c])  # the code is mounted: a restart is enough
+        self.assertTrue([c for c in self.fake.calls if c.startswith("compose restart")])
+        self.fake.calls.clear()
+        os.makedirs(os.path.join(self.work, "stack", "telegram"), exist_ok=True)
+        self.commit("new package", "stack/telegram/requirements.txt", "pyyaml\nrequests\n")
+        self.publish("v1.1.0", "with a new package")
+        self.assertEqual(self.go("update", "--yes"), 0, self.say())
+        self.assertTrue([c for c in self.fake.calls if "--build" in c])
+        self.assertIn("Rebuilding", self.say())
+
+    def test_files_newer_than_what_runs_are_started_instead_of_saying_up_to_date(self):
+        self.publish("v1.0.0", "one")
+        self.assertEqual(self.go("update", "--yes"), 0, self.say())
+        os.makedirs(os.path.join(self.app, "core"), exist_ok=True)
+        with open(os.path.join(self.app, "core", "version.py"), "w") as f:
+            f.write('VERSION = "0.2.0"\n')
+        git(self.app, "add", "-A"); git(self.app, "commit", "-q", "-m", "moved by hand")
+        git(self.work, "pull", "-q", self.app, "HEAD"); git(self.work, "push", "-q", "origin", "main"); git(self.work, "tag", "v1.0.1"); git(self.work, "push", "-q", "origin", "v1.0.1")
+        git(self.app, "fetch", "-q", "--tags", "origin")
+        self.ctx.running_version = lambda: "0.1.2"
+        self.fake.calls.clear()
+        self.assertEqual(self.go("update", "--check"), 0, self.say())
+        self.assertIn("still on 0.1.2", self.say())
+        self.assertEqual(self.fake.calls, [])  # a check changes nothing
+        self.assertEqual(self.go("update", "--yes"), 0, self.say())
+        self.assertIn("Now running 0.2.0", self.say())
+        self.ctx.running_version = lambda: "0.2.0"
+        self.assertEqual(self.go("update"), 0)
+        self.assertIn("Already up to date", self.say())
 
     def test_it_asks_first_and_no_answer_means_no(self):
         self.publish("v1.0.0", "one")

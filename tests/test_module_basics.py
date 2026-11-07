@@ -1,5 +1,5 @@
 """The moved modules still say what they said when they lived in bot.py (clock frozen at 3 Nov 2026, 10 AM UTC; network blocked)."""
-import os, re, unittest
+import json, os, re, unittest
 
 import harness
 from harness import load_bot
@@ -354,6 +354,30 @@ class Basics(unittest.TestCase):
         json.dump({"from": "0.1.0", "to": "0.1.1", "at": m.time.time()}, open(f"{d}/update-started.json", "w"))
         self.assertEqual(harness.call(base, "GET", "/server/update")[1]["updated"]["from"], "0.1.0")  # updated from the dashboard: the card shows
 
+    def test_a_new_version_is_offered_on_telegram_once_with_its_notes_and_buttons(self):
+        import modules.server as m, tempfile
+        sent = []
+        on = type("C", (), {"missing": lambda self, caps: []})()
+        st = {"version": "0.2.1", "latest": "0.3.9", "available": True, "state": "idle", "helper": True, "updated": None,
+              "notes": {"security": ["Lock the PIN."], "new": ["Add money."], "fixed": []}}
+        self.patch(m, DATA=tempfile.mkdtemp(), CAPS=on, update_state=lambda fresh=False: st, send=lambda text, buttons=None, **kw: sent.append((text, buttons)))
+        m.check_update()
+        m.check_update()
+        self.assertEqual(len(sent), 1)  # once per version
+        text, buttons = sent[0]
+        self.assertIn("0.3.9 is out", text)
+        self.assertLess(text.index("Security"), text.index("New"))
+        self.assertNotIn("Fixed", text)  # an empty kind is left out
+        self.assertEqual([b["text"] for b in buttons[0]], ["⬆️ Update now", "Later"])
+        json.dump({"telegram": False}, open(f"{m.DATA}/update-prefs.json", "w"))
+        st["latest"] = "0.3.10"
+        m.check_update()
+        self.assertEqual(len(sent), 1)  # turned off in Settings, Updates
+        self.patch(m, CAPS=type("C", (), {"missing": lambda self, caps: caps})())
+        os.remove(f"{m.DATA}/update-prefs.json")
+        m.check_update()
+        self.assertEqual(len(sent), 1)  # no Telegram: nothing is sent, nothing breaks
+
     def test_clocks_can_be_added_and_removed_live(self):
         import modules.clock as m
         before = list(m.CLOCKS)
@@ -408,7 +432,7 @@ class Basics(unittest.TestCase):
         self.assertIsNotNone(r.find("GET", "/sg"))
         self.assertIsNotNone(r.find("POST", "/sg/tick"))
         self.assertIs(self.bot.sg, m.sg)
-        self.assertEqual(set(m.SG_SEED), {"meds", "health", "log"})  # a fresh install starts empty
+        self.assertEqual(set(m.SG_SEED), {"meds", "health", "log", "quiet"})  # a fresh install starts empty, quiet hours off
 
     def test_python_dash_m_core_finds_the_app(self):
         import core.__main__  # noqa: F401  (importing it must not start anything)

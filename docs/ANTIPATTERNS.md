@@ -27,6 +27,7 @@ Mistakes that already happened in this project, so they do not happen twice. Eac
 
 ## Images and updates
 - **`:latest` or an unpinned image tag.** Pin every image to an exact version. `scripts/check-pins.py` enforces it.
+- **Typing `git tag` for a release.** Raise `VERSION` in a pull request; the Cut release workflow tags it (docs/RELEASING.md). Tagging by hand went wrong three times in one day.
 - **Accepting a major version bump unread.** n8n, Grafana and Open WebUI migrate their data on first start, and some cannot go back. Read the notes and take `homelab backup` first.
 - **A commit sentence nobody outside the code understands.** Commit subjects are the release notes people read in the update popup. Use the right prefix (`security:`, `feat:`, `fix:`) and say what changes for them.
 - **Auto-updating behind `homelab update`.** Watchtower is off by default because it moves pinned versions on its own.
@@ -38,6 +39,7 @@ Mistakes that already happened in this project, so they do not happen twice. Eac
 - **Committing data, env files or backups.** The data guard blocks them. Do not force-add.
 - **Bypassing a hook with `--no-verify`.** If a guard fails, fix the cause.
 - **Printing the personal-value list** in a log, commit message, issue or PR.
+- **Money in plain view.** Names and amounts leave the Money module masked unless the request may see them (with a settings PIN, only with it). Never send them to Telegram or a log.
 
 ## Process
 - **Pushing to `main`.** Use a branch and a pull request.

@@ -2,7 +2,7 @@
 slots and weekly courses into medicines. Plain functions over plain data, so tests need no clock, no Telegram and no files.
 
 A medicine: {"id", "name", "dose", "every": day | week | 2weeks | month, "times": ["08:00", ...] (24-hour, as stored),
-"weekday": 0-6 (Monday is 0, for every week), "monthday": 1-28 (for every month), "start": "YYYY-MM-DD", "stop_after": n or None, "remind": bool}.
+"weekday": 0-6 (Monday is 0, for every week), "monthday": 1-28 (for every month), "start": "YYYY-MM-DD", "stop_after": n or None, "remind": bool, "left": pills left or None, "per": pills per dose (1)}.
 One dose is a medicine at one of its times on one day. It is ticked in the log as "<id>@<HHMM>", so a medicine taken twice a day has two ticks."""
 import re
 from datetime import date, datetime, timedelta
@@ -103,12 +103,57 @@ def clean(b, today):
         if b.get("monthday") not in range(1, 29):
             return None, "Choose a date from 1 to 28 (every month has those)."
         m["monthday"] = b["monthday"]
+    left, per = b.get("left"), b.get("per")
+    if left not in (None, ""):
+        if not isinstance(left, int) or not 0 <= left <= 9999:
+            return None, "Pills left must be a number from 0 to 9999."
+        if per not in (None, "") and (not isinstance(per, int) or not 1 <= per <= 20):
+            return None, "Per dose must be a number from 1 to 20."
+        m["left"], m["per"] = left, per or 1
     stop = b.get("stop_after")
     if stop not in (None, "", 0):
         if not isinstance(stop, int) or not 1 <= stop <= 999:
             return None, "Stop after must be a number from 1 to 999."
         m["stop_after"] = stop
     return m, None
+
+
+def runs_out(m, today, ticked=()):
+    """The first day a dose cannot be taken because the pills have run out, or None when the count is not kept or lasts over a year.
+    ticked is the dose keys already ticked today (their pills are already counted off)."""
+    if m.get("left") is None:
+        return None
+    left, per = m["left"], max(1, m.get("per") or 1)
+    for i in range(400):
+        d = today + timedelta(days=i)
+        if not dose_no(m, d):
+            continue
+        for t in m["times"]:
+            if i == 0 and key(m["id"], t) in ticked:
+                continue
+            if left < per:
+                return d
+            left -= per
+    return None
+
+
+def month(meds, log, y, mo, today):
+    """Each day of a month: how many doses were due and how many were ticked. Days after today count what is due, with none taken."""
+    out, d = [], date(y, mo, 1)
+    while d.month == mo:
+        day, items = log.get(d.isoformat()) or {}, [(m, t) for m, t, _ in doses_on(meds, d)]
+        out.append({"date": d.isoformat(), "due": len(items), "taken": sum(1 for m, t in items if day.get(key(m["id"], t))), "future": d > today,
+                    "items": [{"name": m["name"], "time": t, "taken": bool(day.get(key(m["id"], t)))} for m, t in items]})
+        d += timedelta(days=1)
+    return out
+
+
+def quiet(q, t):
+    """Is time t (a datetime) inside the quiet hours q = {"on", "from": "22:30", "to": "07:00"}? Overnight ranges work."""
+    if not q or not q.get("on") or not (TIME.fullmatch(str(q.get("from"))) and TIME.fullmatch(str(q.get("to")))):
+        return False
+    now_m, a, b = t.hour * 60 + t.minute, int(q["from"][:2]) * 60 + int(q["from"][3:]), int(q["to"][:2]) * 60 + int(q["to"][3:])
+    return a <= now_m < b if a < b else now_m >= a or now_m < b
 
 
 def parse_when(s):

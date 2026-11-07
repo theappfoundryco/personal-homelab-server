@@ -64,3 +64,23 @@ Add `modules: {pets: true}` to `config.yaml` if it is off by default, restart, a
 - Times shown to people are 12-hour (4:30 AM).
 - Sizes and colours come from the design tokens, never raw pixels.
 - Say what to do when something is missing, never just "failed".
+
+## Share it with others
+
+A module is one folder, so sharing it is sharing that folder.
+
+1. Put your module folder in a git repository of its own, with `module.yaml` and `__init__.py` at the top. Add a short README: what it does, what it needs, and a screenshot made with fake data.
+2. Keep to the rules here and in CONTRIBUTING.md: no personal values, pinned versions, a clear message when something it needs is missing.
+3. Add it to the list of community modules: open a pull request that adds one line to `docs/community-modules.md`.
+
+## Install a module someone shared
+
+A module runs inside the assistant with access to your data, like the built-in ones. Only add modules from people you trust, and read the code first.
+
+```bash
+git clone <the module's repository> ~/personal-homelab-server/modules/<its name>
+homelab restart
+```
+
+It shows up in Settings, Modules, where you can switch it off. `homelab update` leaves it alone. To remove it, delete its folder and run `homelab restart`.
+

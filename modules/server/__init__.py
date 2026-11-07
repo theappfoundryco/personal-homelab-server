@@ -252,23 +252,7 @@ def vtuple(v):
     return tuple(int(x) for x in m.groups()) if m else None
 
 
-CATS = (("security", "security"), ("feat", "new"), ("fix", "fixed"))  # commit prefix, notes section; the popup shows them in this order
-NOTE = re.compile(r"(feat|fix|security)(?:\([^)]*\))?!?:\s*(.+)")
-
-
-def parse_notes(subjects):
-    """Commit subjects as release notes: feat: is New, fix: is Fixed, security: is Security. Other prefixes (docs:, chore:, ...) are left out."""
-    out = {sec: [] for _, sec in CATS}
-    for s in subjects:
-        m = NOTE.fullmatch(str(s or "").strip())
-        if not m:
-            continue
-        text = re.sub(r"\s*\(#\d+\)$", "", m.group(2)).strip().rstrip(".")
-        text = text[:1].upper() + text[1:] + "." if text else ""
-        sec = dict(CATS)[m.group(1)]
-        if text and text not in out[sec]:
-            out[sec].append(text)
-    return out
+from core.release_notes import CATS, NOTE, parse_notes  # noqa: E402,F401  (kept here too: the popup and older tests use them)
 
 
 @cached(600)
@@ -358,11 +342,66 @@ def update_state(fresh=False):
         updated = {"from": seen, "to": VERSION, "notes": release_notes(seen, VERSION)}
     return {"version": VERSION, "latest": rel["tag"].lstrip("v") if rel else None, "available": available, "url": rel["url"] if rel else "",
             "notes": release_notes(VERSION, rel["tag"]) if available else None, "updated": updated, "state": state, "log": update_log_tail() if state != "idle" else [], "helper": not CAPS.missing(["host_agent"]),
-            "to": (mark or {}).get("to") if state != "idle" else None}
+            "to": (mark or {}).get("to") if state != "idle" else None, "telegram": not CAPS.missing(["telegram"]), "prefs": update_prefs()}
+
+
+def start_update():
+    """Starts the safe update through the host helper (the dashboard button and the Telegram button both land here). -> (ok, message)."""
+    st = update_state()
+    if st["state"] == "updating":
+        return False, "An update is already running."
+    if not st["available"]:
+        return False, "You already have the newest version."
+    r = host_action("update")
+    if r.get("ok"):
+        json.dump({"from": VERSION, "to": st["latest"], "at": time.time()}, open(f"{DATA}/update-started.json", "w"))
+    return bool(r.get("ok")), r.get("msg", "")
+
+
+BACKUP_KEYS = {"backup": bool, "backup_at": str, "backup_keep": int, "offsite_to": str, "offsite_keep": int, "alerts": bool}
+
+
+def backups_view():
+    """What Settings, Backups shows: the helper's status file, the night settings, and what this machine can do."""
+    night = (SETTINGS.merged().get("night") or {})
+    st = safe(lambda: json.load(open(f"{DATA}/backup-status.json")), {}) or {}
+    return {"ok": True, "helper": not CAPS.missing(["host_agent"]), "telegram": not CAPS.missing(["telegram"]), "status": st,
+            "night": {"backup": bool(night.get("backup")), "backup_at": night.get("backup_at") or "3:30 AM", "backup_keep": night.get("backup_keep") or 7,
+                      "offsite_to": night.get("offsite_to") or "", "offsite_keep": night.get("offsite_keep") or 7, "alerts": night.get("alerts", True) is not False}}
+
+
+def update_prefs():
+    return {"telegram": True, **(safe(lambda: json.load(open(f"{DATA}/update-prefs.json")), {}) or {})}
+
+
+KIND_LINES = (("security", "🔒 <b>Security</b>"), ("new", "✨ <b>New</b>"), ("fixed", "🛠 <b>Fixed</b>"))
+
+
+def update_text(st):
+    n = st.get("notes") or {}
+    parts = [f"⬆️ <b>Homelab {esc(st['latest'])} is out</b> (you have {esc(st['version'])})"]
+    for k, head in KIND_LINES:
+        if n.get(k):
+            parts.append(head + "\n" + "\n".join(f"• {esc(x)}" for x in n[k][:6]) + (f"\n• and {len(n[k]) - 6} more" if len(n[k]) > 6 else ""))
+    parts.append("A snapshot is taken first, and it goes back by itself if anything fails." if st["helper"] else "Update from the terminal with: homelab update")
+    return "\n\n".join(parts)
+
+
+def check_update():
+    """Telegram, once per version: what a new release brings and an Update now button; once it is in, a short note. Quiet while
+    Telegram is off, while the dashboard cannot read the release list, or when turned off in Settings, Updates."""
+    if CAPS.missing(["telegram"]) or not update_prefs()["telegram"]:
+        return
+    st = update_state()
+    if st.get("updated") and once(f"updated:{VERSION}"):
+        safe(lambda: json.dump({"version": VERSION}, open(f"{DATA}/version-seen.json", "w")))  # said on Telegram, so the Home card need not
+        send(f"✅ <b>Now on {esc(VERSION)}</b>. Your data and settings are as they were.")
+    if st["available"] and st["state"] == "idle" and once(f"update-offer:{st['latest']}"):
+        send(update_text(st), [[B("⬆️ Update now", f"upd:go:{st['latest']}"), B("Later", "upd:later")]] if st["helper"] else None)
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
+    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "once", "send", "typing")
 
     router = app.router
 
@@ -479,15 +518,71 @@ def register(app):
         from core.settings import guard_request
         if bad := guard_request(SETTINGS, req):  # the settings PIN, when one is set, guards updating too
             return bad
-        st = update_state()
-        if st["state"] == "updating":
-            return {"ok": False, "msg": "An update is already running."}, 409
-        if not st["available"]:
-            return {"ok": False, "msg": "You already have the newest version."}, 409
-        r = host_action("update")
-        if r.get("ok"):
-            json.dump({"from": VERSION, "to": st["latest"], "at": time.time()}, open(f"{DATA}/update-started.json", "w"))
+        ok, msg = start_update()
+        if not ok and msg in ("An update is already running.", "You already have the newest version."):
+            return {"ok": False, "msg": msg}, 409
+        return {"ok": ok, "msg": msg}
+
+    @router.get("/server/backups")
+    def server_backups(req):
+        return backups_view()
+
+    @router.post("/server/backups/now")
+    def server_backups_now(req):
+        r = host_action("backup")
         return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/drives")  # look for plugged-in drives, then answer with the list
+    def server_backups_drives(req):
+        r = host_action("drives")
+        return {**backups_view(), "ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/settings")  # {backup, backup_at, backup_keep, offsite_to, offsite_keep, alerts}: any of them
+    def server_backups_settings(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        b = req.json() or {}
+        ch = {f"night.{k}": b[k] for k in BACKUP_KEYS if k in b}
+        if not ch or any(not isinstance(b[k], BACKUP_KEYS[k]) or isinstance(b[k], bool) != (BACKUP_KEYS[k] is bool) for k in b if k in BACKUP_KEYS):
+            return {"ok": False, "msg": "Nothing to change."}, 400
+        for k in ("backup_keep", "offsite_keep"):
+            if k in b and not 1 <= b[k] <= 60:
+                return {"ok": False, "msg": "Keep between 1 and 60."}, 400
+        if "offsite_to" in b:
+            ch["night.offsite_to"] = b["offsite_to"].strip()
+            if ch["night.offsite_to"] and not ch["night.offsite_to"].startswith(("/", "~")):
+                return {"ok": False, "msg": "Use a full folder path, like /Volumes/Backup or ~/Dropbox/homelab."}, 400
+        ok, problems = SETTINGS.set(ch)
+        if not ok:
+            return {"ok": False, "msg": " ".join(problems)}, 400
+        host_action("offsite")  # the helper checks the folder now and writes its state
+        return backups_view()
+
+    @router.post("/server/backups/passphrase")  # {passphrase}: lock the copies; "" stops locking new ones
+    def server_backups_passphrase(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        text = str((req.json() or {}).get("passphrase") or "")
+        if text and not 8 <= len(text) <= 64:
+            return {"ok": False, "msg": "Use 8 to 64 characters."}, 400
+        r = host_action("passphrase", text.encode().hex() if text else "-")
+        return {**backups_view(), "ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/backups/restore")  # {name}: the dashboard goes away for a minute, then comes back with the backup's data
+    def server_backups_restore(req):
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        r = host_action("restore", str((req.json() or {}).get("name") or ""))
+        return {"ok": bool(r.get("ok")), "msg": r.get("msg", "")}
+
+    @router.post("/server/update/prefs")  # {telegram: bool}: tell me on Telegram when a new version is out
+    def server_update_prefs(req):
+        p = {**update_prefs(), "telegram": bool((req.json() or {}).get("telegram"))}
+        json.dump(p, open(f"{DATA}/update-prefs.json", "w"))
+        return {"ok": True, **p}
 
     @router.post("/server/gitsync")  # back up to GitHub now; answers with what the run did
     def server_gitsync(req):

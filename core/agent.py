@@ -4,12 +4,15 @@ It does only what ALLOW names, only to this project's containers, and ignores an
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time as _time  # not `time`: the test harness swaps that name to freeze the clock
 
-ALLOW = ("restart", "start", "reboot", "update", "add", "remove", "access")  # add and remove take an app id from core/apps.py or core/custom.py; access takes lan or local
+ALLOW = ("restart", "start", "reboot", "update", "add", "remove", "access", "backup", "restore", "drives", "offsite", "passphrase")
+# add and remove take an app id from core/apps.py or core/custom.py; access takes lan or local; restore takes a backup's file name;
+# passphrase takes the new passphrase in hex (or - to remove it)
 PROJECT = "homelab"  # the compose project; only its containers can be restarted
 ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 APP = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,60}$")
@@ -52,8 +55,14 @@ def alive(data_dir, now=None):
 
 
 class Agent:
-    def __init__(self, data_dir, root, run=shell, spawn=None, log=print, now=None, allow_reboot=False, python=None, spawn_apps=None, stats_dir=None):
+    def __init__(self, data_dir, root, run=shell, spawn=None, log=print, now=None, allow_reboot=False, python=None, spawn_apps=None, stats_dir=None, home=None,
+                 platform=None, notify=None):
         self.data, self.root, self.run, self.log = data_dir, root, run, log
+        self.home = home or os.path.dirname(os.path.abspath(data_dir))  # ~/.homelab: backups and the passphrase live here, outside the container's view
+        self.backups = os.path.join(self.home, "backups")
+        self.platform = platform or ("mac" if sys.platform == "darwin" else "linux")
+        self.notify = notify or self._notify
+        self.backup_busy, self.bot_down_since = False, None
         self.stats = stats_dir  # where host.json goes (what this machine is and how busy it is), for the Server page
         self.now = now or _time.time
         self.allow_reboot, self.python = allow_reboot, python or sys.executable
@@ -71,16 +80,16 @@ class Agent:
             out |= set(text.split()) if rc == 0 else set()
         return out
 
-    def _spawn(self):
+    def _spawn(self):  # unbuffered (-u): a file is block-buffered, so without it the log stayed empty until the update ended
         log = open(os.path.join(self.data, "update.log"), "ab")
-        return subprocess.Popen([self.python, "-W", "ignore", "-m", "core.cli", "update", "--yes"], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root},
+        return subprocess.Popen([self.python, "-u", "-W", "ignore", "-m", "core.cli", "update", "--yes"], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root, "PYTHONUNBUFFERED": "1"},
                                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
 
     def _spawn_apps(self, action, app):
         """Adding an app can download for minutes, so it runs on its own; progress goes to apps.log."""
         log = open(os.path.join(self.data, "apps.log"), "ab")
         args = ["access", app] if action == "access" else ["apps", action, app]
-        return subprocess.Popen([self.python, "-W", "ignore", "-m", "core.cli", *args], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root},
+        return subprocess.Popen([self.python, "-u", "-W", "ignore", "-m", "core.cli", *args], cwd=self.root, env={**os.environ, "PYTHONPATH": self.root, "PYTHONUNBUFFERED": "1"},
                                 stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
 
     def handle(self, text):
@@ -107,6 +116,8 @@ class Agent:
             except OSError as e:
                 return False, f"could not start it ({e})"
             return True, f"{ {'add': 'adding', 'remove': 'removing', 'access': 'switching access to'}[action]} {parts[1]} (progress is in apps.log)"
+        if action in ("backup", "restore", "drives", "offsite", "passphrase"):
+            return self.backup_action(action, parts[1:])
         if len(parts) != 1:
             return False, f"{action} takes no name"
         if action == "reboot":
@@ -223,7 +234,142 @@ class Agent:
                 rc, out = self.run([self.python, "-W", "ignore", "-m", "core.cli", *args], cwd=self.root, env={"PYTHONPATH": self.root}, timeout=3600)
                 self.night_record(job, start, rc == 0, out.strip().splitlines()[-1] if out.strip() else "")
                 self.night_running.discard(job)
+                if job == "backup":
+                    self.after_backup(rc == 0, out, "nightly")
             threading.Thread(target=go, daemon=True).start()
+
+    # ---- backups (Settings, Backups): now, restore, the copy to your own drive or folder, and problem alerts on Telegram
+    def night_settings(self):
+        try:
+            with open(os.path.join(self.data, "settings.json")) as f:
+                return json.load(f).get("night") or {}
+        except (OSError, ValueError, AttributeError):
+            return {}
+
+    def backup_action(self, action, args):
+        from core import backups
+        if action == "drives":
+            backups.write_status(self.data, drives=backups.drives(self.platform))
+            return True, "drives listed"
+        if action == "offsite":
+            self.refresh_status()
+            return True, "checked"
+        if action == "passphrase":
+            if len(args) != 1:
+                return False, "that needs the passphrase"
+            try:
+                text = "" if args[0] == "-" else bytes.fromhex(args[0]).decode("utf-8")
+            except ValueError:
+                return False, "that passphrase was not understood"
+            ok, msg = backups.set_passphrase(self.home, text)
+            self.refresh_status()
+            return ok, msg
+        if action == "backup":
+            if args:
+                return False, "backup takes no name"
+            if self.backup_busy:
+                return False, "a backup is already running"
+            self.backup_busy = True
+
+            def go():
+                try:
+                    rc, out = self.run([self.python, "-W", "ignore", "-m", "core.cli", "backup"], cwd=self.root, env={"PYTHONPATH": self.root}, timeout=3600)
+                    self.after_backup(rc == 0, out, "manual")
+                finally:
+                    self.backup_busy = False
+            threading.Thread(target=go, daemon=True).start()
+            return True, "backup started"
+        if len(args) != 1 or not backups.NAME.match(args[0]) or not os.path.isfile(os.path.join(self.backups, args[0])):
+            return False, "that backup is not in the backups folder"
+        log = open(os.path.join(self.data, "restore.log"), "ab")
+        subprocess.Popen([self.python, "-u", "-W", "ignore", "-m", "core.cli", "restore", os.path.join(self.backups, args[0]), "--yes"], cwd=self.root,
+                         env={**os.environ, "PYTHONPATH": self.root, "PYTHONUNBUFFERED": "1"}, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        return True, "restoring; the assistant restarts when it is done"
+
+    def refresh_status(self, last=None):
+        """Writes what the Backups page shows: the list, the chosen folder's state right now, and whether copies are locked."""
+        from core import backups
+        to = self.night_settings().get("offsite_to") or ""
+        prev = backups.read_status(self.data).get("offsite") or {}
+        prev = prev if prev.get("to") == to else {}
+        live = backups.check_target(to, self.home, self.platform) if to else "off"
+        state = live if live != "ok" else ("ok" if prev.get("state") == "ok" else "ready")
+        parts = {"list": backups.listing(self.backups), "passphrase": os.path.isfile(os.path.join(self.home, backups.PASSFILE)),
+                 "offsite": {**prev, "to": to, "state": state, "msg": backups.STATES.get(state, "")}}
+        if last:
+            parts["last"] = last
+        return backups.write_status(self.data, **parts)
+
+    def after_backup(self, ok, out, kind):
+        """After a backup: record it, copy the newest one out if a folder is chosen, and say so on Telegram when something went wrong."""
+        from core import backups
+        lst = backups.listing(self.backups)
+        newest = next((b for b in lst if b["kind"] in ("nightly", "backup")), None)
+        msg = out.strip().splitlines()[-1].strip() if out and out.strip() else ""
+        last = {"at": self.now(), "ok": bool(ok and newest), "kind": kind, "file": newest["name"] if newest and ok else None,
+                "size": newest["size"] if newest and ok else 0, "msg": "" if ok else re.sub(r"^\s*stop\s+", "", msg)}
+        self.refresh_status(last)
+        if not ok:
+            self.alert("backup-failed", f"⚠️ <b>Last night's backup did not work</b>\n{last['msg'] or 'See Settings, Backups.'}" if kind == "nightly" else None)
+            return
+        self.copy_out(newest)
+
+    def copy_out(self, newest):
+        from core import backups
+        night = self.night_settings()
+        to = night.get("offsite_to")
+        if not to or not newest:
+            return
+        state, name = backups.copy_out(os.path.join(self.backups, newest["name"]), to, int(night.get("offsite_keep") or 7), self.home, self.platform)
+        off = {"to": to, "state": state, "msg": backups.STATES.get(state, ""), "at": self.now() if state == "ok" else (backups.read_status(self.data).get("offsite") or {}).get("at"),
+               "file": name if state == "ok" else (backups.read_status(self.data).get("offsite") or {}).get("file"), "source": newest["name"],
+               "encrypted": bool(name and name.endswith(".enc"))}
+        backups.write_status(self.data, offsite=off)
+        if state != "ok":
+            self.alert(f"offsite-{state}", f"💾 <b>The backup copy did not go to your drive</b>\n{backups.STATES.get(state, '')}\nThe backup itself is safe on this machine.")
+
+    def watch(self):
+        """Every few minutes: copy a waiting backup once its drive is back, warn about a nearly full disk, and about the assistant being down."""
+        from core import backups
+        try:
+            st = backups.read_status(self.data)
+            off, lst = st.get("offsite") or {}, backups.listing(self.backups)
+            newest = next((b for b in lst if b["kind"] in ("nightly", "backup")), None)
+            if self.night_settings().get("offsite_to") and newest and (off.get("state") != "ok" or off.get("source") != newest["name"]) and not self.backup_busy:
+                self.copy_out(newest)
+        except Exception as e:
+            self.log(f"backup copy check: {e}")
+        try:
+            u = shutil.disk_usage(self.home)
+            pct = round(100 * (u.total - u.free) / u.total) if u.total else 0
+            backups.write_status(self.data, disk={"pct": pct, "free": u.free, "total": u.total})
+            if pct >= 90:
+                self.alert(f"disk-{95 if pct >= 95 else 90}", f"💽 <b>This machine's disk is {pct}% full</b>\n{u.free / 1e9:.1f} GB left. Free some space; old backups are in ~/.homelab/backups.")
+        except OSError:
+            pass
+        if os.path.exists(os.path.join(self.data, "stopped-by-you.json")):
+            self.bot_down_since = None  # you stopped it with homelab stop: nothing to say
+            return
+        rc, text = self.run(["docker", "inspect", "-f", "{{.State.Running}}", "telegram-bot"])
+        if rc == 0 and text.strip() == "false":
+            self.bot_down_since = self.bot_down_since or self.now()
+            if self.now() - self.bot_down_since >= 600:
+                started = self.run(["docker", "start", "telegram-bot"])[0] == 0
+                self.alert("bot-down", "🛑 <b>The assistant stopped</b>\n" + ("I started it again. If it keeps stopping, run: homelab logs" if started else "It would not start. Run: homelab doctor"))
+                self.bot_down_since = None
+        else:
+            self.bot_down_since = None
+
+    def alert(self, key, text):
+        """A problem alert on Telegram, at most once a day per kind, unless turned off in Settings, Backups."""
+        from core import backups
+        if text and self.night_settings().get("alerts", True) and backups.once_a_day(self.data, key, self.now()):
+            self.notify(text)
+
+    def _notify(self, text):
+        from core import backups
+        from core.cli import read_env
+        return backups.telegram(read_env(os.path.join(self.root, "stack", ".env")), text)
 
     def serve(self, every=2, stop=lambda: False, sleep=_time.sleep):
         self.log(f"host helper running for {self.data}")
@@ -242,6 +388,8 @@ class Agent:
                     self.night()
                 if n % 300 == 0:
                     self.prune()
+                if n % 150 == 0:  # every 5 minutes: a copy that is waiting for its drive, the disk, and the assistant itself
+                    self.watch()
             except Exception as e:  # keep serving: one bad request must not stop restarts working
                 self.log(f"error: {e}")
             n += 1

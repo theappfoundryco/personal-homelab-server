@@ -12,7 +12,7 @@ host.need(globals(), "DATA")
 
 # ================================================================ Health: medicines and appointments you add yourself
 # Reminders only. This is a tick-list, not medical advice: never change a dose or skip one because of it.
-from modules.health.meds import EVERY, clean, convert_old, dose_no, doses_on, early, key, next_due, split_key  # noqa: E402
+from modules.health.meds import EVERY, clean, convert_old, dose_no, doses_on, early, key, month, next_due, quiet, runs_out, split_key  # noqa: E402
 from modules.health.meds import at as dose_at  # noqa: E402
 
 SG_FILE = f"{DATA}/sg.json"
@@ -20,6 +20,7 @@ SG_SEED = {
     "meds": [],     # medicines, see modules/health/meds.py: name, dose, how often, times, reminders
     "health": [],   # [{"id", "name", "due": "YYYY-MM-DD", "why"}]  appointments and tests
     "log": {},      # {"2026-10-22": {"<med id>@0800": true}}  ticks by meds day
+    "quiet": {"on": False, "from": "22:30", "to": "07:00"},  # reminders in these hours arrive without a sound
 }
 
 
@@ -59,10 +60,11 @@ def new_id(prefix, taken):
 def sg_view():
     t = meds_day()
     with _lock:
-        meds = [{**m, "next": (n.isoformat() if (n := next_due(m, t)) else None)} for m in sg["meds"]]
+        ticked = set(k for k, v in (sg["log"].get(t.isoformat()) or {}).items() if v)
+        meds = [{**m, "next": (n.isoformat() if (n := next_due(m, t)) else None), "runs_out": (r.isoformat() if (r := runs_out(m, t, ticked)) else None)} for m in sg["meds"]]
         doses = [{"key": key(m["id"], tm), "id": m["id"], "name": m["name"], "dose": m.get("dose", ""), "time": tm, "every": m["every"], "n": n,
                   "of": m.get("stop_after"), "remind": m.get("remind", False)} for m, tm, n in doses_on(sg["meds"], t)]
-        return {"today": t.isoformat(), "date": now().date().isoformat(), "meds": meds, "doses": doses, "health": sg["health"], "telegram": telegram_on(),
+        return {"today": t.isoformat(), "date": now().date().isoformat(), "meds": meds, "doses": doses, "health": sg["health"], "telegram": telegram_on(), "quiet": sg.get("quiet") or SG_SEED["quiet"],
                 "log": {k: v for k, v in sg["log"].items() if k >= (t - timedelta(days=60)).isoformat()}}
 
 
@@ -74,10 +76,12 @@ def sg_api(path, b):
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) or d > now().date().isoformat() or not k:
                 return {"ok": False}, 400
             day = sg["log"].setdefault(d, {})
+            was = bool(day.get(k))
             if b.get("done"):
                 day[k] = True
             else:
                 day.pop(k, None)
+            count_pills(k, was, bool(b.get("done")))
         elif path == "/sg/med":  # add (no id) or change one medicine
             m, why = clean(b, meds_day())
             if not m:
@@ -92,6 +96,11 @@ def sg_api(path, b):
             else:
                 m["id"] = new_id("m", {x["id"] for x in sg["meds"]})
                 sg["meds"].append(m)
+        elif path == "/sg/quiet":  # {on, from, to}
+            q = {"on": bool(b.get("on")), "from": str(b.get("from") or "22:30"), "to": str(b.get("to") or "07:00")}
+            if not all(re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", q[x]) for x in ("from", "to")) or q["from"] == q["to"]:
+                return {"ok": False, "msg": "Choose two different times."}, 400
+            sg["quiet"] = q
         elif path == "/sg/med/delete":  # {id}; its past ticks stay in the log, nothing shows them
             sg["meds"] = [x for x in sg["meds"] if x["id"] != b.get("id")]
         elif path == "/sg/appt":  # add (no id) or change an appointment: {id?, name, due, why}
@@ -116,12 +125,37 @@ def sg_api(path, b):
     return {"ok": True, **sg_view()}, 200
 
 
+def count_pills(k, was, done):
+    """A tick takes the dose's pills off the count kept for that medicine; an untick puts them back. Called with _lock held."""
+    m, _ = find_dose(k)
+    if not m or m.get("left") is None or was == done:
+        return
+    m["left"] = max(0, m["left"] + (-1 if done else 1) * max(1, m.get("per") or 1))
+
+
+def month_view(q):
+    """GET /sg/month?m=2026-11: each day's due and taken doses, for the calendar."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})", str(q.get("m") or "")) or re.fullmatch(r"(\d{4})-(\d{2})", meds_day().isoformat()[:7])
+    y, mo = int(m.group(1)), int(m.group(2))
+    if not 1 <= mo <= 12:
+        return {"ok": False}, 400
+    with _lock:
+        return {"ok": True, "month": f"{y:04d}-{mo:02d}", "days": month(sg["meds"], sg["log"], y, mo, meds_day())}
+
+
 def check_sg():
-    """Telegram nudges for appointments, 2 weeks and 2 days ahead."""
+    """Telegram nudges: an appointment 2 weeks and 2 days ahead, and a medicine whose pills run out within 5 days."""
     t = now()
     if t.hour < 9 or not telegram_on():
         return
     d = t.date()
+    ticked = set(k for k, v in (sg["log"].get(meds_day().isoformat()) or {}).items() if v)
+    for m in sg["meds"]:
+        ro = runs_out(m, meds_day(), ticked)
+        if ro and (ro - meds_day()).days <= 5 and once(f"refill:{m['id']}:{ro}"):
+            last = ro - timedelta(days=1)
+            send(f"💊 <b>Time to refill {esc(m['name'])}</b>\n{m['left']} left, enough until {last:%a %d %b}." if ro > meds_day()
+                 else f"💊 <b>{esc(m['name'])} has run out</b>\nRefill it, then update the count in the Health tab.")
     for h in sg["health"]:
         left = (date.fromisoformat(h["due"]) - d).days
         if left in (14, 2) and once(f"health:{h['id']}:{h['due']}:{left}"):
@@ -161,12 +195,13 @@ def check_meds():
                 if snz.pop(sk, None):
                     save()
                 continue
+            hush = quiet(sg.get("quiet"), t)  # quiet hours: the message still comes, without a sound
             if start <= t < start + timedelta(hours=3) and once(f"med:{sk}"):
-                send(med_text(m, tm), med_buttons(k, d))
+                send(med_text(m, tm), med_buttons(k, d), silent=hush)
                 nudged("med", sid=k, d=str(d))
             elif sk in snz and snz[sk] <= time.time():
                 snz.pop(sk); save()
-                send(med_text(m, tm, again=True), med_buttons(k, d))
+                send(med_text(m, tm, again=True), med_buttons(k, d), silent=hush)
                 nudged("med", sid=k, d=str(d))
 
 
@@ -197,6 +232,7 @@ def med_tick(k, d):
     with _lock:
         was = (sg["log"].get(d) or {}).get(k)
         sg["log"].setdefault(d, {})[k] = True
+        count_pills(k, bool(was), True)
         sg_save()
         state.setdefault("med_snooze", {}).pop(f"{k}:{d}", None)
         save()
@@ -264,5 +300,6 @@ def register(app):
     host.need(globals(), "B", "CAPS", "TZ", "_lock", "journal_day", "once", "save", "send", "state")
 
     app.router.add("GET", "/sg", lambda req: sg_view())
+    app.router.add("GET", "/sg/month", lambda req: month_view(req.query))
     app.router.add_prefix("POST", "/sg/", lambda req: sg_api(req.path, req.json()))
 
