@@ -421,6 +421,10 @@ else
   { printf '\nHL_DATA_DIR=%s\nHL_STATS_DIR=%s\nHL_PORT=%s\n' "$DATA" "$HL_HOME/stats" "$HL_PORT"; } >> "$STACK/.env"
   ok ".env created with new passwords (only you have them)"
 fi
+# AI chat (Open WebUI) must use the Ollama found on this machine too, not the Docker one it defaults to
+if [ "$HOST_OLLAMA" = 1 ] && [ "$DRY" != 1 ] && ! grep -q '^HL_OLLAMA_URL=' "$STACK/.env"; then
+  printf 'HL_OLLAMA_URL=http://host.docker.internal:11434\n' >> "$STACK/.env"
+fi
 
 # Who can reach the dashboard. Opening it to the network is only done with a PIN set, because it holds your journal and budget.
 if [ -n "$LANPIN" ]; then  # the PIN goes in through stdin, never on a command line where other users could see it
