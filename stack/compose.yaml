@@ -115,6 +115,8 @@ services:
       PYTHONUNBUFFERED: "1"
     labels:
       com.centurylinklabs.watchtower.enable: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # how it reaches an Ollama running on this machine outside Docker (Linux does not add this name by itself)
     volumes:
       - ./telegram/intents.py:/app/intents.py:ro
       - ../core:/app/core:ro
@@ -260,6 +262,8 @@ services:
       WEB_SEARCH_ENGINE: searxng
       RAG_WEB_SEARCH_ENGINE: searxng
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # how it reaches an Ollama running on this machine outside Docker (Linux does not add this name by itself)
     volumes:
       - open-webui-data:/app/backend/data
     ports:
