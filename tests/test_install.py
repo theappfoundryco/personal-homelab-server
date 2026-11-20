@@ -205,7 +205,7 @@ class Installer(unittest.TestCase):
         extra = {"mint": 'ID=linuxmint\nID_LIKE="ubuntu debian"\nPRETTY_NAME="Linux Mint 21.3"\nUBUNTU_CODENAME=jammy\n', "debian-fork": 'ID=example\nID_LIKE=debian\nPRETTY_NAME="Example OS"\n',
                  "nixos": "ID=nixos\n", "gentoo": "ID=gentoo\n", "unknown": 'ID=plan9\nPRETTY_NAME="Plan 9"\n', "empty": ""}
         cases = {n: open(os.path.join(fix, n)).read() for n in os.listdir(fix)} | extra
-        fn = subprocess.run(["sed", "-n", "/^docker_plan() {/,/^}/p", os.path.join(ROOT, "install.sh")], capture_output=True, text=True).stdout
+        fn = "".join(subprocess.run(["sed", "-n", f"/^{f}() {{/,/^}}/p", os.path.join(ROOT, "install.sh")], capture_output=True, text=True).stdout for f in ("os_info", "docker_plan"))
         for name, text in cases.items():
             p = os.path.join(self.tmp, "os-release-" + name)
             open(p, "w").write(text)
@@ -228,6 +228,14 @@ class Installer(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("virtualisation.docker.enable = true;", out)
         self.assertNotIn("sudo", self.calls())
+
+    def test_a_minimal_linux_without_python_gets_it_from_its_own_packages(self):
+        self.without("python3")
+        self.stub("sudo", table=EXTRA)
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "alpine-3.20"))
+        self.assertIn("Installing Python 3: the homelab command and the host helper need it.", out)
+        self.assertIn("sudo apk add python3 py3-yaml", self.calls())
+        self.assertIn("python-linux yes", open(os.path.join(self.home, "installed.txt")).read())
 
     def test_your_name_and_time_zone_are_written_the_first_time_only(self):
         rc, out = self.run_it("--no-open", HL_NAME='Sa"m \\ Lee')

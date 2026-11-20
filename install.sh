@@ -229,18 +229,23 @@ start_docker_mac() { # starts whichever Docker this Mac has, from the terminal
 }
 # Where Docker comes from on Linux. The same rules as docker_source() in core/hardware/system.py (tests/test_install.py checks they agree),
 # in shell because a bare machine may not have Python yet. get.docker.com only supports the distributions in the first line.
-docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and DK_NAME from /etc/os-release
-  local ID="" ID_LIKE="" VERSION_ID="" UBUNTU_CODENAME="" PRETTY_NAME="" i fam=other
+os_info() { # sets OS_ID, OS_LIKE, OS_VER, OS_UBUNTU, OS_PRETTY and OS_FAM (debian, rhel, suse, arch, alpine, void, gentoo, nixos, amzn or other) from /etc/os-release
+  local f="${HL_OS_RELEASE:-/etc/os-release}" i
+  OS_ID="" OS_LIKE="" OS_VER="" OS_UBUNTU="" OS_PRETTY="" OS_FAM=other
   # read in a subshell: os-release also sets NAME, VERSION and others this script uses for its own things
-  [ -r "${HL_OS_RELEASE:-/etc/os-release}" ] && eval "$(. "${HL_OS_RELEASE:-/etc/os-release}" 2>/dev/null
-    printf 'ID=%q ID_LIKE=%q VERSION_ID=%q UBUNTU_CODENAME=%q PRETTY_NAME=%q' "${ID:-}" "${ID_LIKE:-}" "${VERSION_ID:-}" "${UBUNTU_CODENAME:-}" "${PRETTY_NAME:-}")"
-  DK_NAME="${PRETTY_NAME:-${ID:-this system}}" DK_CMD="" DK_NOTE=""
-  for i in $ID $ID_LIKE; do
+  [ -r "$f" ] && eval "$(. "$f" 2>/dev/null
+    printf 'OS_ID=%q OS_LIKE=%q OS_VER=%q OS_UBUNTU=%q OS_PRETTY=%q' "${ID:-}" "${ID_LIKE:-}" "${VERSION_ID:-}" "${UBUNTU_CODENAME:-}" "${PRETTY_NAME:-}")"
+  for i in $OS_ID $OS_LIKE; do
     case "$i" in
-      debian|ubuntu|raspbian) fam=debian ;; amzn) fam=amzn ;; fedora|rhel|centos|rocky|almalinux|ol) fam=rhel ;;
-      opensuse*|suse|sles) fam=suse ;; arch|archarm|manjaro) fam=arch ;; alpine|postmarketos) fam=alpine ;; void|gentoo|nixos) fam=$i ;; *) continue ;;
+      debian|ubuntu|raspbian) OS_FAM=debian ;; amzn) OS_FAM=amzn ;; fedora|rhel|centos|rocky|almalinux|ol) OS_FAM=rhel ;;
+      opensuse*|suse|sles) OS_FAM=suse ;; arch|archarm|manjaro) OS_FAM=arch ;; alpine|postmarketos) OS_FAM=alpine ;; void|gentoo|nixos) OS_FAM=$i ;; *) continue ;;
     esac; break
   done
+}
+docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and DK_NAME from /etc/os-release
+  os_info
+  local ID="$OS_ID" VERSION_ID="$OS_VER" UBUNTU_CODENAME="$OS_UBUNTU" PRETTY_NAME="$OS_PRETTY" fam="$OS_FAM"
+  DK_NAME="${PRETTY_NAME:-${ID:-this system}}" DK_CMD="" DK_NOTE=""
   case "$ID" in
     ubuntu|debian|raspbian|centos|rhel|rocky|almalinux|fedora|ol)
       DK_HOW=script
@@ -270,6 +275,22 @@ docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and 
     *) DK_NOTE="Docker's installer does not support ${PRETTY_NAME:-${ID:-this system}}. Install Docker and its compose plugin with your package manager, then run install.sh again." ;;
   esac
 }
+# The homelab command and the host helper are Python. A minimal Linux (Arch, Alpine, openSUSE, Void) may not have it.
+if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
+  os_info
+  case "$OS_FAM" in
+    debian) PY_CMD="sudo apt-get install -y python3 python3-yaml" ;; rhel|amzn) PY_CMD="sudo dnf install -y python3 python3-pyyaml" ;;
+    suse) PY_CMD="sudo zypper --non-interactive install python3 python3-PyYAML" ;; arch) PY_CMD="sudo pacman -S --needed --noconfirm python python-yaml" ;;
+    alpine) PY_CMD="sudo apk add python3 py3-yaml" ;; void) PY_CMD="sudo xbps-install -Sy python3 python3-yaml" ;; *) PY_CMD="" ;;
+  esac
+  if [ -n "$PY_CMD" ]; then
+    say "        Installing Python 3: the homelab command and the host helper need it. ${D}$PY_CMD${R}"
+    do_it sh -c "$PY_CMD" && rec python-linux yes || warn "Could not install Python 3. Install it yourself, then run install.sh again: $PY_CMD"
+  else
+    warn "Python 3 is not installed. The homelab command needs it: install python3 with your package manager."
+  fi
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   warn "Docker is not installed. It runs the assistant and its apps."
   if [ "$OS" = mac ]; then
