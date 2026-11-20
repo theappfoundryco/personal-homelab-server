@@ -167,7 +167,7 @@ rec() { # rec kind value: notes something put on this machine outside the folder
   [ "$DRY" = 1 ] && return 0; mkdir -p "$HL_HOME"; grep -qx "$1 $2" "$HL_HOME/installed.txt" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$HL_HOME/installed.txt"
 }
 brew_new() { local f; for f in "$@"; do brew list --formula "$f" >/dev/null 2>&1 || printf '%s ' "$f"; done; } # the ones not installed yet
-rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true; }
+rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || true; }  # tr's broken-pipe warning is expected: head stops reading
 
 main() {  # everything runs inside a function so bash reads the whole file first; editing install.sh while it runs cannot break that run
 banner
