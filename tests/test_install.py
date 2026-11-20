@@ -233,7 +233,8 @@ class Installer(unittest.TestCase):
         self.without("python3")
         self.stub("sudo", table=EXTRA)
         rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "alpine-3.20"))
-        self.assertIn("Installing Python 3: the homelab command and the host helper need it.", out)
+        self.assertIn("Python 3 is needed by the homelab command and the host helper.", out)
+        self.assertIn("Python 3 installed", out)
         self.assertIn("sudo apk add python3 py3-yaml", self.calls())
         self.assertIn("python-linux yes", open(os.path.join(self.home, "installed.txt")).read())
 

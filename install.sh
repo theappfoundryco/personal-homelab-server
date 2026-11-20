@@ -284,8 +284,9 @@ if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
     alpine) PY_CMD="sudo apk add python3 py3-yaml" ;; void) PY_CMD="sudo xbps-install -Sy python3 python3-yaml" ;; *) PY_CMD="" ;;
   esac
   if [ -n "$PY_CMD" ]; then
-    say "        Installing Python 3: the homelab command and the host helper need it. ${D}$PY_CMD${R}"
-    do_it sh -c "$PY_CMD" && rec python-linux yes || warn "Could not install Python 3. Install it yourself, then run install.sh again: $PY_CMD"
+    say "        Python 3 is needed by the homelab command and the host helper. ${D}$PY_CMD${R}"
+    do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
+    step "Installing Python 3" "Python 3 installed" sh -c "$PY_CMD" && rec python-linux yes || warn "Could not install Python 3. Install it yourself, then run install.sh again: $PY_CMD"
   else
     warn "Python 3 is not installed. The homelab command needs it: install python3 with your package manager."
   fi
@@ -316,7 +317,8 @@ if ! command -v docker >/dev/null 2>&1; then
         say "        Installing it from ${DK_NAME}'s own packages, because Docker's installer does not support ${DK_NAME}. It asks for your password."
         [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
         say "        ${D}$DK_CMD${R}"
-        do_it sh -c "$DK_CMD" || stop "Installing Docker did not work. See the messages above, or run it yourself: $DK_CMD"
+        do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
+        step "Installing Docker" "Docker installed" sh -c "$DK_CMD" || stop "Installing Docker did not work. See the lines above, or run it yourself: $DK_CMD"
         rec docker-linux yes
         do_it sudo usermod -aG docker "${USER:-$(id -un)}" ;;
       *)
