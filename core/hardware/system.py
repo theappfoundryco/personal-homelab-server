@@ -149,7 +149,7 @@ def docker_source(osr, system="Linux"):
         if key in DOCKER_BY_HAND:
             return "by-hand", "", DOCKER_BY_HAND[key]
     if fam == "debian" and osr.get("UBUNTU_CODENAME"):  # built on Ubuntu, but get.docker.com does not know it by name (Mint, Pop!_OS, elementary, Zorin ...)
-        return "package", "sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker", \
+        return "package", "sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker", \
             "Docker comes from your distribution's packages, because Docker's own installer does not know this distribution by name."
     if fam == "debian":  # built on Debian: Debian 12 packages only the old docker-compose 1, without the  docker compose  command this needs
         return "by-hand", "", "Docker's installer does not know this distribution by name. Install Docker Engine and its compose plugin with Docker's Debian steps: https://docs.docker.com/engine/install/debian/"

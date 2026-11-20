@@ -269,7 +269,7 @@ docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and 
     amzn/*|*/amzn) DK_NOTE="Amazon Linux has Docker (sudo dnf install docker) but not its compose part. Install the compose plugin from https://docs.docker.com/compose/install/linux/" ;;
     */debian)
       if [ -n "$UBUNTU_CODENAME" ]; then
-        DK_HOW=package DK_CMD="sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
+        DK_HOW=package DK_CMD="sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
         DK_NOTE="Docker comes from your distribution's packages, because Docker's own installer does not know this distribution by name."
       else DK_NOTE="Docker's installer does not know this distribution by name. Install Docker Engine and its compose plugin with Docker's Debian steps: https://docs.docker.com/engine/install/debian/"; fi ;;
     *) DK_NOTE="Docker's installer does not support ${PRETTY_NAME:-${ID:-this system}}. Install Docker and its compose plugin with your package manager, then run install.sh again." ;;
@@ -279,7 +279,7 @@ docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and 
 if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
   os_info
   case "$OS_FAM" in
-    debian) PY_CMD="sudo apt-get install -y python3 python3-yaml" ;; rhel|amzn) PY_CMD="sudo dnf install -y python3 python3-pyyaml" ;;
+    debian) PY_CMD="sudo apt-get update -qq && sudo apt-get install -y python3 python3-yaml" ;; rhel|amzn) PY_CMD="sudo dnf install -y python3 python3-pyyaml" ;;
     suse) PY_CMD="sudo zypper --non-interactive install python3 python3-PyYAML" ;; arch) PY_CMD="sudo pacman -S --needed --noconfirm python python-yaml" ;;
     alpine) PY_CMD="sudo apk add python3 py3-yaml" ;; void) PY_CMD="sudo xbps-install -Sy python3 python3-yaml" ;; *) PY_CMD="" ;;
   esac
