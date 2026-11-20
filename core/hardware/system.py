@@ -138,6 +138,9 @@ def docker_source(osr, system="Linux"):
     if system == "Darwin":
         return "mac", "", ""
     ident, fam, ver = osr.get("ID", ""), family(osr), osr.get("VERSION_ID", "")
+    if (ident, ver) == ("ubuntu", "20.04"):  # get.docker.com stops here: it wants docker-model-plugin, which is not published for 20.04
+        return "package", "sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker", \
+            f"{osr.get('PRETTY_NAME') or 'Ubuntu 20.04'} has reached its end of life, and Docker's own installer no longer works on it, so Docker comes from Ubuntu's packages."
     if ident in DOCKER_SCRIPT:
         eol = (ident, ver.split(".")[0] if ident in ("debian", "centos", "rhel") else ver) in DOCKER_EOL or (ident == "fedora" and ver.isdigit() and int(ver) < 43)
         note = f"{osr.get('PRETTY_NAME') or ident} has reached its end of life. Docker still installs, but plan to upgrade." if eol else ""

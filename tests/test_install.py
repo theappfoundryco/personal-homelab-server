@@ -252,6 +252,20 @@ class Installer(unittest.TestCase):
         self.assertIn("Your user was just added to the docker group; continuing with it", out)
         self.assertIn("sg docker -c", self.calls())
 
+    def test_no_sudo_says_how_to_get_it_instead_of_command_not_found(self):
+        self.without("python3", "docker")  # a minimal Debian: no Python, no Docker, no sudo
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "debian-12"))
+        self.assertEqual(rc, 1)
+        self.assertIn("Installing Python 3 needs sudo, which is not on this machine.", out)
+        self.assertNotIn("command not found", out)
+
+    def test_ubuntu_20_04_gets_docker_from_ubuntu_packages(self):
+        self.without("docker")
+        self.stub("sudo", table=EXTRA)
+        self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-20.04"))
+        self.assertIn("apt-get install -y docker.io docker-compose-v2", self.calls())
+        self.assertNotIn("get.docker.com", self.calls())
+
     def test_your_name_and_time_zone_are_written_the_first_time_only(self):
         rc, out = self.run_it("--no-open", HL_NAME='Sa"m \\ Lee')
         self.assertEqual(rc, 0, out)

@@ -38,7 +38,7 @@ class Distributions(unittest.TestCase):
             self.assertEqual((how, cmd), ("script", "curl -fsSL https://get.docker.com | sudo sh"), name)
 
     def test_end_of_life_releases_install_with_a_note(self):
-        for name in ("debian-11", "ubuntu-20.04", "fedora-40", "fedora-41"):
+        for name in ("debian-11", "fedora-40", "fedora-41"):
             how, _, note = system.docker_source(osr(name))
             self.assertEqual(how, "script", name)
             self.assertIn("end of life", note, name)
@@ -51,6 +51,12 @@ class Distributions(unittest.TestCase):
         for name in ("opensuse-leap-15.6", "opensuse-tumbleweed"):
             self.assertIn("zypper --non-interactive install docker docker-compose", system.docker_source(osr(name))[1], name)
         self.assertIn("xbps-install -Sy docker docker-compose", system.docker_source(osr("void"))[1])
+
+    def test_ubuntu_20_04_uses_ubuntu_packages_because_docker_s_installer_fails_there(self):
+        how, cmd, note = system.docker_source(osr("ubuntu-20.04"))  # seen 2026-11-21: "Unable to locate package docker-model-plugin"
+        self.assertEqual(how, "package")
+        self.assertIn("docker.io docker-compose-v2", cmd)
+        self.assertIn("end of life", note)
 
     def test_amazon_linux_says_the_compose_part_is_missing(self):
         how, cmd, note = system.docker_source(osr("amazonlinux-2023"))

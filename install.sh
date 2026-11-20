@@ -246,6 +246,10 @@ docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and 
   os_info
   local ID="$OS_ID" VERSION_ID="$OS_VER" UBUNTU_CODENAME="$OS_UBUNTU" PRETTY_NAME="$OS_PRETTY" fam="$OS_FAM"
   DK_NAME="${PRETTY_NAME:-${ID:-this system}}" DK_CMD="" DK_NOTE=""
+  if [ "$ID.$VERSION_ID" = ubuntu.20.04 ]; then  # get.docker.com stops here: it wants docker-model-plugin, which is not published for 20.04
+    DK_HOW=package DK_CMD="sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
+    DK_NOTE="$DK_NAME has reached its end of life, and Docker's own installer no longer works on it, so Docker comes from Ubuntu's packages."; return
+  fi
   case "$ID" in
     ubuntu|debian|raspbian|centos|rhel|rocky|almalinux|fedora|ol)
       DK_HOW=script
@@ -275,6 +279,11 @@ docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and 
     *) DK_NOTE="Docker's installer does not support ${PRETTY_NAME:-${ID:-this system}}. Install Docker and its compose plugin with your package manager, then run install.sh again." ;;
   esac
 }
+need_sudo() { # stop with what to do when sudo is missing (minimal Debian has none), instead of a raw "command not found"
+  command -v sudo >/dev/null 2>&1 && return 0
+  [ "$DRY" = 1 ] && return 0
+  stop "Installing $1 needs sudo, which is not on this machine. As root, install the sudo package and add your user to the sudo (or wheel) group, then log in again and run install.sh."
+}
 # The homelab command and the host helper are Python. A minimal Linux (Arch, Alpine, openSUSE, Void) may not have it.
 if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
   os_info
@@ -285,6 +294,7 @@ if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
   esac
   if [ -n "$PY_CMD" ]; then
     say "        Python 3 is needed by the homelab command and the host helper. ${D}$PY_CMD${R}"
+    need_sudo "Python 3"
     do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
     step "Installing Python 3" "Python 3 installed" sh -c "$PY_CMD" && rec python-linux yes || warn "Could not install Python 3. Install it yourself, then run install.sh again: $PY_CMD"
   else
@@ -304,6 +314,7 @@ if ! command -v docker >/dev/null 2>&1; then
         say "        Installing it with Docker's own installer for Linux (get.docker.com). It asks for your password."
         [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
         if command -v curl >/dev/null 2>&1; then
+          need_sudo Docker
           do_it sh -c 'curl -fsSL https://get.docker.com | sudo sh' || stop "Docker's installer failed. See the messages above."
           rec docker-linux yes
           do_it sudo systemctl enable --now docker
@@ -317,6 +328,7 @@ if ! command -v docker >/dev/null 2>&1; then
         say "        Installing it from ${DK_NAME}'s own packages, because Docker's installer does not support ${DK_NAME}. It asks for your password."
         [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
         say "        ${D}$DK_CMD${R}"
+        need_sudo Docker
         do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
         step "Installing Docker" "Docker installed" sh -c "$DK_CMD" || stop "Installing Docker did not work. See the lines above, or run it yourself: $DK_CMD"
         rec docker-linux yes
