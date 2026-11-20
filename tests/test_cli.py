@@ -349,6 +349,25 @@ class Everyday(Base):
         self.assertEqual(self.fake.calls, ["compose up -d --build landing telegram-bot docker-proxy", "compose stop landing telegram-bot docker-proxy",
                                            "compose restart landing telegram-bot docker-proxy", "compose logs --tail 100 -f telegram-bot"])
 
+    def test_start_and_restart_wait_for_the_dashboard_so_status_right_after_works(self):
+        # Install test on Linux: restart returned while the bot was still starting, and the status run right after failed.
+        for cmd in ("start", "restart"):
+            self.fake.probes = [None, None, {"ok": False, "modules": []}]
+            self.assertEqual(self.go(cmd), 0, cmd)
+            self.assertIn("Dashboard is up: http://localhost:3999", self.say())
+            self.assertEqual(self.fake.probes, [{"ok": False, "modules": []}], cmd)  # it asked until the dashboard answered
+
+    def test_start_and_restart_say_how_to_look_when_the_dashboard_never_answers(self):
+        for cmd in ("start", "restart"):
+            self.fake.probes = [None]
+            self.assertEqual(self.go(cmd), 1, cmd)
+            self.assertIn("not answering on port 3999 after 9 seconds. See why with: homelab logs", self.say())
+
+    def test_start_does_not_wait_when_compose_failed(self):
+        self.fake.up_rc, self.fake.probes = 1, [None]
+        self.assertEqual(self.go("start"), 1)
+        self.assertNotIn("not answering", self.say())
+
     def test_apps_add_starts_only_the_new_ones_with_what_they_need_and_start_includes_them(self):
         self.assertEqual(self.go("apps"), 0)
         self.assertIn("off  ollama", self.say())

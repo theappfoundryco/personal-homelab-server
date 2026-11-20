@@ -140,7 +140,16 @@ def status(c):
 def start(c):
     if not c.docker_ready():
         return 1
-    return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+    return c.compose("up", "-d", "--build", *services(c), stream=True)[0] or wait_up(c)
+
+
+def wait_up(c):
+    """After start or restart, wait for the dashboard to answer, so a status or update run right after does not find it still starting."""
+    if wait_healthy(c, must_be_ok=False):
+        c.out(f"  ok    Dashboard is up: http://localhost:{c.port}")
+        return 0
+    c.out(f"  warn  The apps started, but the dashboard is not answering on port {c.port} after {c.health_wait} seconds. See why with: {NAME} logs")
+    return 1
 
 
 def stop(c):
@@ -152,7 +161,7 @@ def stop(c):
 def restart(c):
     if not c.docker_ready():
         return 1
-    return c.compose("restart", *services(c), stream=True)[0]
+    return c.compose("restart", *services(c), stream=True)[0] or wait_up(c)
 
 
 def logs(c, service=None, follow=False):
