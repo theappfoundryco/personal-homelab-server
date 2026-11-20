@@ -442,10 +442,10 @@ fi
 
 # 6. What this machine can run
 say ""
-if command -v python3 >/dev/null 2>&1 && PYTHONPATH="$HERE" python3 -W ignore -c 'import yaml' >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then  # PyYAML is not needed to read and save the machine, only to name its profile (the app does that if it is missing)
   PYTHONPATH="$HERE" python3 -W ignore -m core hardware $([ "$DRY" = 1 ] || echo "--save $DATA") 2>/dev/null | sed -n '1,2p' | sed 's/^/  /' || warn "Could not read the hardware."
 else
-  warn "Python 3 with PyYAML is not here, so the hardware check is skipped. The setup can still run without it."
+  warn "Python 3 is not here, so the hardware check is skipped. The setup can still run without it."
 fi
 
 # 7. Start
