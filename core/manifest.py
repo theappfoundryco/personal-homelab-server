@@ -4,13 +4,14 @@ something the user had before. One line per thing in HL_HOME/installed.txt: "<ki
 Kinds:
   brew <formula>     a Homebrew package this program installed (colima, docker, docker-compose, docker-buildx, ollama)
   homebrew yes       Homebrew itself (recorded, kept on uninstall: other programs use it)
-  docker-linux yes   Docker from get.docker.com (recorded, kept on uninstall: other programs use it)
+  docker-linux yes   Docker from get.docker.com or the distribution's packages (recorded, kept on uninstall: other programs use it)
+  python-linux yes   Python 3 from the distribution's packages (recorded, kept on uninstall: other programs use it)
   plugin-link <path> a Docker plugin link in ~/.docker/cli-plugins
 """
 import os
 
 FILE = "installed.txt"
-SHARED = ("homebrew", "docker-linux")  # recorded so the user can see them, never removed by this program
+SHARED = ("homebrew", "docker-linux", "python-linux")  # recorded so the user can see them, never removed by this program
 
 
 def path(home):

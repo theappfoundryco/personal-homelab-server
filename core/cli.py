@@ -103,11 +103,15 @@ class Ctx:
 
     def running(self):
         rc, text = self.run(["docker", "ps", "--format", "{{.Names}}"])
+        self.denied = rc != 0 and "permission denied" in text.lower()  # in the docker group, but this terminal started before that
         return rc == 0 and "telegram-bot" in text.split()
 
     def version(self):
         rc, text = self.git("describe", "--tags", "--always")
         return text if rc == 0 and text else "unknown"
+
+
+DENIED = "  stop  Docker refused your user: this terminal was opened before you joined the docker group. Open a new terminal (or log out and back in), then try again."
 
 
 def services(c):
@@ -122,6 +126,9 @@ def status(c):
     if not c.docker_ready():
         return 1
     rc, text = c.compose("ps", "-a", "--format", "{{.Service}}|{{.State}}")
+    if rc != 0 and "permission denied" in text.lower():
+        c.out(DENIED)
+        return 1
     states = dict(l.split("|", 1) for l in text.splitlines() if "|" in l) if rc == 0 else {}
     for s in services(c):
         c.out(f"  {s}: {states.get(s, 'not created')}")
@@ -165,7 +172,7 @@ def doctor(c):
     if not c.docker_ready():
         return 1
     if not c.running():
-        c.out(f"  stop  The assistant is not running. Start it with: {NAME} start")
+        c.out(DENIED if getattr(c, "denied", False) else f"  stop  The assistant is not running. Start it with: {NAME} start")
         return 1
     return c.compose("exec", "-T", "telegram-bot", "python", "-m", "core", "doctor", stream=True)[0]
 
@@ -878,7 +885,7 @@ def _uninstall_plan(c, purge):
         keep.append(f"Backups in {c.backups}")
     else:
         keep += [f"Your data in {c.data} (homelab uninstall --purge deletes it)", "Downloaded app images and AI models", "Homebrew packages this program installed (--purge removes them)"]
-    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker"}[k] for k, _ in rec if k in manifest.SHARED]
+    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker", "python-linux": "Python 3"}[k] for k, _ in rec if k in manifest.SHARED]
     if shared:
         keep.append(" and ".join(shared) + ": other programs use it, so it stays")
     keep.append(f"This folder ({c.root}); delete it yourself when you are done")
