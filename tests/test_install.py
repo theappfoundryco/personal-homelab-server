@@ -191,11 +191,43 @@ class Installer(unittest.TestCase):
     def test_linux_without_docker_uses_the_official_installer(self):
         self.without("docker")
         self.stub("sudo", table=EXTRA)
-        self.run_it("--no-open")
+        self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-24.04"))
         calls = self.calls()
         self.assertIn("get.docker.com", calls)
         self.assertIn("sudo systemctl enable --now docker", calls)
         self.assertIn("sudo usermod -aG docker", calls)
+
+    def test_linux_docker_source_in_the_installer_agrees_with_the_app_for_every_distribution(self):
+        import sys
+        sys.path.insert(0, ROOT)
+        from core.hardware import system
+        fix = os.path.join(ROOT, "tests", "fixtures", "os-release")
+        extra = {"mint": 'ID=linuxmint\nID_LIKE="ubuntu debian"\nPRETTY_NAME="Linux Mint 21.3"\nUBUNTU_CODENAME=jammy\n', "debian-fork": 'ID=example\nID_LIKE=debian\nPRETTY_NAME="Example OS"\n',
+                 "nixos": "ID=nixos\n", "gentoo": "ID=gentoo\n", "unknown": 'ID=plan9\nPRETTY_NAME="Plan 9"\n', "empty": ""}
+        cases = {n: open(os.path.join(fix, n)).read() for n in os.listdir(fix)} | extra
+        fn = subprocess.run(["sed", "-n", "/^docker_plan() {/,/^}/p", os.path.join(ROOT, "install.sh")], capture_output=True, text=True).stdout
+        for name, text in cases.items():
+            p = os.path.join(self.tmp, "os-release-" + name)
+            open(p, "w").write(text)
+            out = subprocess.run(["bash", "-c", fn + '\nNAME=Alex; docker_plan; printf "%s\\n%s\\n%s\\n%s" "$DK_HOW" "$DK_CMD" "$DK_NOTE" "$NAME"'],
+                                 env={"PATH": os.environ["PATH"], "HL_OS_RELEASE": p}, capture_output=True, text=True).stdout.split("\n")
+            self.assertEqual(tuple(out[:3]), system.docker_source(system.parse_os_release(text)), name)
+            self.assertEqual(out[3], "Alex", name)  # reading os-release never touches the installer's own NAME
+
+    def test_arch_without_docker_uses_its_own_packages_and_nixos_stops_with_what_to_do(self):
+        self.without("docker")
+        self.stub("sudo", table=EXTRA)
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "archlinux"))
+        self.assertIn("from Arch Linux's own packages", out)
+        self.assertIn("sudo pacman -S --needed --noconfirm docker docker-compose docker-buildx", self.calls())
+        self.assertNotIn("get.docker.com", self.calls())
+        nix = os.path.join(self.tmp, "nixos")
+        open(nix, "w").write("ID=nixos\nPRETTY_NAME=NixOS\n")
+        open(self.log, "w").close()
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=nix)
+        self.assertEqual(rc, 1)
+        self.assertIn("virtualisation.docker.enable = true;", out)
+        self.assertNotIn("sudo", self.calls())
 
     def test_your_name_and_time_zone_are_written_the_first_time_only(self):
         rc, out = self.run_it("--no-open", HL_NAME='Sa"m \\ Lee')

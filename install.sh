@@ -227,23 +227,82 @@ start_docker_mac() { # starts whichever Docker this Mac has, from the terminal
   fi
   [ "$DRY" = 1 ] || wait_docker 120
 }
+# Where Docker comes from on Linux. The same rules as docker_source() in core/hardware/system.py (tests/test_install.py checks they agree),
+# in shell because a bare machine may not have Python yet. get.docker.com only supports the distributions in the first line.
+docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and DK_NAME from /etc/os-release
+  local ID="" ID_LIKE="" VERSION_ID="" UBUNTU_CODENAME="" PRETTY_NAME="" i fam=other
+  # read in a subshell: os-release also sets NAME, VERSION and others this script uses for its own things
+  [ -r "${HL_OS_RELEASE:-/etc/os-release}" ] && eval "$(. "${HL_OS_RELEASE:-/etc/os-release}" 2>/dev/null
+    printf 'ID=%q ID_LIKE=%q VERSION_ID=%q UBUNTU_CODENAME=%q PRETTY_NAME=%q' "${ID:-}" "${ID_LIKE:-}" "${VERSION_ID:-}" "${UBUNTU_CODENAME:-}" "${PRETTY_NAME:-}")"
+  DK_NAME="${PRETTY_NAME:-${ID:-this system}}" DK_CMD="" DK_NOTE=""
+  for i in $ID $ID_LIKE; do
+    case "$i" in
+      debian|ubuntu|raspbian) fam=debian ;; amzn) fam=amzn ;; fedora|rhel|centos|rocky|almalinux|ol) fam=rhel ;;
+      opensuse*|suse|sles) fam=suse ;; arch|archarm|manjaro) fam=arch ;; alpine|postmarketos) fam=alpine ;; void|gentoo|nixos) fam=$i ;; *) continue ;;
+    esac; break
+  done
+  case "$ID" in
+    ubuntu|debian|raspbian|centos|rhel|rocky|almalinux|fedora|ol)
+      DK_HOW=script
+      case "$ID.${VERSION_ID%%.*}" in debian.11|debian.10|centos.8|centos.7|rhel.7) DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade." ;; esac
+      case "$ID.$VERSION_ID" in ubuntu.20.04|ubuntu.18.04) DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade." ;; esac
+      [ "$ID" = fedora ] && [ "${VERSION_ID:-0}" -lt 43 ] 2>/dev/null && DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade."
+      DK_CMD="curl -fsSL https://get.docker.com | sudo sh"; return ;;
+  esac
+  DK_HOW=package
+  case "$fam" in
+    arch) DK_CMD="sudo pacman -S --needed --noconfirm docker docker-compose docker-buildx && sudo systemctl enable --now docker" ;;
+    alpine) DK_CMD="sudo apk add docker docker-cli-compose && sudo rc-update add docker default && sudo rc-service docker start" ;;
+    suse) DK_CMD="sudo zypper --non-interactive install docker docker-compose && sudo systemctl enable --now docker" ;;
+    void) DK_CMD="sudo xbps-install -Sy docker docker-compose && sudo ln -sf /etc/sv/docker /var/service/" ;;
+    *) DK_HOW=by-hand ;;
+  esac
+  [ "$DK_HOW" = package ] && return
+  case "$ID/$fam" in
+    nixos/*|*/nixos) DK_NOTE="Docker is set up in your NixOS configuration: add  virtualisation.docker.enable = true;  then run  sudo nixos-rebuild switch" ;;
+    gentoo/*|*/gentoo) DK_NOTE="Install Docker with:  sudo emerge --ask app-containers/docker app-containers/docker-compose  then start it with your init system." ;;
+    amzn/*|*/amzn) DK_NOTE="Amazon Linux has Docker (sudo dnf install docker) but not its compose part. Install the compose plugin from https://docs.docker.com/compose/install/linux/" ;;
+    */debian)
+      if [ -n "$UBUNTU_CODENAME" ]; then
+        DK_HOW=package DK_CMD="sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
+        DK_NOTE="Docker comes from your distribution's packages, because Docker's own installer does not know this distribution by name."
+      else DK_NOTE="Docker's installer does not know this distribution by name. Install Docker Engine and its compose plugin with Docker's Debian steps: https://docs.docker.com/engine/install/debian/"; fi ;;
+    *) DK_NOTE="Docker's installer does not support ${PRETTY_NAME:-${ID:-this system}}. Install Docker and its compose plugin with your package manager, then run install.sh again." ;;
+  esac
+}
 if ! command -v docker >/dev/null 2>&1; then
   warn "Docker is not installed. It runs the assistant and its apps."
   if [ "$OS" = mac ]; then
     say "        Installing Colima (a light Docker with no app to open) with Homebrew."
     install_docker_mac || stop "Could not install Docker. Install it yourself (brew install colima docker docker-compose), then run install.sh again."
   else
-    say "        Installing it with Docker's own installer for Linux (get.docker.com). It asks for your password."
-    if command -v curl >/dev/null 2>&1; then
-      do_it sh -c 'curl -fsSL https://get.docker.com | sudo sh' || stop "Docker's installer failed. See the messages above."
-      rec docker-linux yes
-      do_it sudo systemctl enable --now docker
-      do_it sudo usermod -aG docker "${USER:-$(id -un)}"
-    else
-      say "        curl is missing, so Docker can't be downloaded. Install Docker yourself, then run install.sh again."
-      [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
-      exit 1
-    fi
+    docker_plan
+    case "$DK_HOW" in
+      script)
+        say "        Installing it with Docker's own installer for Linux (get.docker.com). It asks for your password."
+        [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
+        if command -v curl >/dev/null 2>&1; then
+          do_it sh -c 'curl -fsSL https://get.docker.com | sudo sh' || stop "Docker's installer failed. See the messages above."
+          rec docker-linux yes
+          do_it sudo systemctl enable --now docker
+          do_it sudo usermod -aG docker "${USER:-$(id -un)}"
+        else
+          say "        curl is missing, so Docker can't be downloaded. Install Docker yourself, then run install.sh again."
+          [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
+          exit 1
+        fi ;;
+      package)
+        say "        Installing it from ${DK_NAME}'s own packages, because Docker's installer does not support ${DK_NAME}. It asks for your password."
+        [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
+        say "        ${D}$DK_CMD${R}"
+        do_it sh -c "$DK_CMD" || stop "Installing Docker did not work. See the messages above, or run it yourself: $DK_CMD"
+        rec docker-linux yes
+        do_it sudo usermod -aG docker "${USER:-$(id -un)}" ;;
+      *)
+        say "        $DK_NOTE"
+        [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
+        exit 1 ;;
+    esac
   fi
   [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
 fi
