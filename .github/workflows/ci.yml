@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/ruff-action@v4
+      - uses: astral-sh/ruff-action@v4.1.0  # no v4 tag is published, only exact versions
         with:
           args: check --select E9,F63,F7,F822,F823 .   # syntax errors and broken names; plain undefined names are checked below
       - name: undefined names (modules get theirs from host.need)
