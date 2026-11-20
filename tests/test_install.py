@@ -251,6 +251,8 @@ class Installer(unittest.TestCase):
         rc, out = self.run_it("--no-open")
         self.assertIn("Your user was just added to the docker group; continuing with it", out)
         self.assertIn("sg docker -c", self.calls())
+        rc, out = self.run_it("--no-open", HL_REEXEC="1")  # what the re-run inside sg prints at the end
+        self.assertIn("Open a new terminal (or log out and back in) before you use", out)
 
     def test_no_sudo_says_how_to_get_it_instead_of_command_not_found(self):
         self.without("python3", "docker")  # a minimal Debian: no Python, no Docker, no sudo

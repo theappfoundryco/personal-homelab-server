@@ -583,6 +583,7 @@ if [ "$BIND" = 0.0.0.0 ]; then
 fi
 say "  ${D}Telegram is not connected yet. The setup wizard in the dashboard walks you through it.${R}"
 say "  ${D}Look after it with${R} $CMD status  ${D}(also: update, backup, modules, logs, help)${R}"
+[ "${HL_REEXEC:-}" = 1 ] && say "  ${Y}Open a new terminal (or log out and back in) before you use $CMD: this one started before you joined the docker group.${R}"
 # Last, so nothing is left to answer in the terminal once the browser takes over
 if [ "$OPEN" = 1 ]; then
   say "  ${D}Opening it in your browser...${R}"
