@@ -8,14 +8,14 @@ A private, self-hosted assistant for the day: a dashboard (notes, journal, gym, 
 
 ## Current state
 
-- Version 0.1.0, the first tagged release. The public history starts there.
+- Version 0.2.1. Tags `v0.1.0` to `v0.2.1` are on GitHub; there are no GitHub Release pages, the tag is what makes a release. The repository is public.
 - Install: `get.sh` (one line, `curl ... | bash`) downloads the project with git and runs `install.sh`. It starts on the newest `v*` tag (stable) or on `main` (`HL_CHANNEL=edge`).
 - Update: `homelab update` needs a clean git tree, fetches, refuses a diverged copy, takes a snapshot backup, stops services, fast-forwards, runs data migrations, rebuilds, waits for `/api/bot/doctor`, and rolls back by itself on any failure. Channels: `stable` (highest release tag) and `edge` (`origin/main`).
 - Setup wizard on first run: name and time zone, machine, modules, AI engine, Telegram, access. Every step can be skipped.
 - Dashboard updates: the dashboard checks for a newer release tag when it opens (GitHub tags API, cached 10 minutes) and shows a popup with the release notes in three kinds: Security (`security:`), New (`feat:`) and Fixed (`fix:`). The notes are the commit subjects between the two tags, from the GitHub compare API, kept in `release-notes.json` in the data folder because tags never move. Update now asks the host helper to run `homelab update --yes` and shows the steps until the new version answers, then reloads. Later hides it until the next version (per browser). After an update, Home shows an Updated card until it is read or closed (`version-seen.json`; a fresh install starts at its own version, so it shows nothing). Settings, Updates shows the same notes and the last five releases. Without the helper the popup shows the commands instead, and offline it shows nothing. Code: `modules/server/__init__.py` (`parse_notes`, `release_notes`, `update_state`), `stack/landing/site/js/update.js`, `css/update.css`.
 - Health (0.2.0): medicines are a list in `sg.json` (`meds`), each with how often (every day at up to six times, every week on a weekday, every 2 weeks from a first date, every month on day 1 to 28), an optional stop after N, and reminders on or off. A dose is ticked in the log as `<id>@HHMM`, by meds day (4 AM to 4 AM). The schedule maths is plain functions in `modules/health/meds.py`. Migration `0002_medicines` turns the old morning, lunch and night slots and weekly courses into medicines and keeps their ticks. Telegram reminders (Done, 5 min, 15 min) only go out while the bot is connected: the form hides the switch, the API refuses it, and the reminder loop skips. Buttons sent before 0.2.0 still work. The Health tab shows the first name from Settings, or User.
 - Custom apps: you can add your own Docker apps from Settings or the command line, each in its own compose project.
-- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. Releases are cut by hand (see "Cut a release" below), and images are built and signed by `images.yml`. The Release workflow (release-please) is switched off because the organization does not let Actions open pull requests. Turn it on with `gh workflow enable Release` once that is allowed.
+- CI (`.github/workflows`): `leak-scan`, `lint`, `compose`, `pins` and `tests` on every push and pull request. CI and Images have run on `main` and pass (checked 2026-11-21). Releases are cut by hand (see "Cut a release" below), and images are built and signed by `images.yml`. The Release workflow (release-please) is switched off because the organization does not let Actions open pull requests. Turn it on with `gh workflow enable Release` once that is allowed.
 
 ## Architecture map
 
@@ -82,11 +82,13 @@ Tag from your development clone, never from the install folder (`~/personal-home
 
 - The unit tests and `make check` pass on an Apple Silicon Mac, including `make check` with the maintainer's personal-value list.
 - `get.sh` against a local throwaway repository (fresh download, release and edge channels, second run, refusals).
+- `get.sh` over the real internet (2026-11-21): the one-line command in a fresh `ubuntu:24.04` container downloaded into `~/personal-homelab-server` and checked out `v0.2.1` (stable), then ran the installer as a dry run.
+- The unit tests and `make check` also pass on Linux (an x86_64 Ubuntu machine).
+- The model tags in `core/hardware/profiles.yaml` all exist in the Ollama library (2026-11-21). `gemma4:26b` downloads 18.7 GB, not the 17 written there.
 - The compose stack has run for real on one Apple Silicon Mac (OrbStack).
 
 ## What has not been verified
 
-- **`get.sh` over the real internet.** The raw GitHub address only works once the repository is public. The stable path (checking out the newest tag) has only been tested against a local repository.
 - **A real Mac and Linux install** with Colima, Docker Desktop, Docker Engine and a Raspberry Pi. The Colima and official-Linux-Docker paths in `install.sh` are covered by tests with fake tools only.
 - **Custom apps on real Docker.** Adding, starting and removing your own app has only run against fake tools.
 - **Homebrew record and purge** (what the installer installed, and removing it again) on a real Mac.
@@ -94,9 +96,8 @@ Tag from your development clone, never from the install folder (`~/personal-home
 - **Medicine reminders on a real Telegram bot**, and the 0.1.x to 0.2.0 migration on a real install with old slots and courses. Both are covered by unit tests with fake data only.
 - **The dashboard Update button and the update popup** have run only against fake helpers and the demo page, never a real update. 0.1.0 and 0.1.1 have no popup, so the move to 0.1.2 goes through `homelab update` or the Update now button in Settings, Updates (0.1.1 has it). The first real popup is from 0.1.2 to the next release.
 - **`homelab update`, rollback and `restore`** against a real remote or a real failure.
-- **GitHub workflows.** None has run yet. Action versions in `.github/workflows` were written from memory and are unchecked.
-- **Pinned image versions** (n8n, Grafana, Open WebUI) were never started together. Check them and take `homelab backup` first.
-- **Model tags** in the hardware profiles are not checked against the Ollama library.
+- **GitHub workflows.** The Release workflow (release-please) has failed on its runs; it is meant to stay off. Image signing and pushing only run on `main` and tags.
+- **Pinned image versions** (n8n, Grafana, Open WebUI) were never started together. Check them and take `homelab backup` first. The n8n pin `3.1.0` is a pre-release on GitHub; n8n's `stable` is 2.48.7 (2026-11-21).
 
 ## Known gaps and open work
 
