@@ -143,12 +143,15 @@ _OS = ("linux", "mac", "wsl", "other")
 
 
 def save(data_dir, hw=None):
-    """Remembers the machine as the installer saw it, so the app can show the real hardware. Returns the path, or None if it could not be written."""
+    """Remembers the machine as the installer saw it (hardware and platform), so the app can show the real one. Returns the path, or None if it could not be written."""
     path = os.path.join(data_dir, FILE)
     try:
         os.makedirs(data_dir, exist_ok=True)
+        if hw is None:
+            from core.hardware import system
+            hw = {**probe(), "platform": system.detect()}
         with open(path + ".tmp", "w") as f:
-            json.dump(hw or probe(), f)
+            json.dump(hw, f)
         os.replace(path + ".tmp", path)
         return path
     except OSError:

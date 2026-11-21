@@ -89,6 +89,16 @@ class SavedByTheInstaller(unittest.TestCase):
         self.assertIsNone(hardware.load_host(self.d))
         self.assertIn(hardware.view(data_dir=self.d)["hardware"]["os"], ("linux", "mac", "wsl", "other"))
 
+    def test_the_installer_saves_the_platform_with_the_hardware_and_the_app_uses_its_os(self):
+        from core import registry
+        self.assertEqual(registry.this_platform(self.d), registry.this_platform())  # nothing saved: what this process sees
+        hardware.save(self.d, {**hardware.probe(**M2), "platform": {"system": "mac", "init": "launchd"}})
+        self.assertEqual(hardware.load_host(self.d)["platform"]["init"], "launchd")
+        self.assertEqual(registry.this_platform(self.d), "mac")  # the app in Docker sees Linux, but this is a Mac
+        path = hardware.save(self.d)  # what the installer does: probe this machine and its platform
+        self.assertIn("family", hardware.load_host(self.d)["platform"])
+        self.assertTrue(path.endswith(hardware.FILE))
+
     def test_saving_to_an_unwritable_place_is_not_an_error(self):
         self.assertIsNone(hardware.save("/proc/definitely/not/here", hardware.probe(**M2)))
 
