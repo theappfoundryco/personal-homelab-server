@@ -11,6 +11,7 @@ from urllib.request import urlopen
 from core import apps as _apps
 from core import custom as _custom
 from core import host
+from core import versions as _versions
 from core.helpers import cached, esc, http, now, safe
 from core.version import VERSION
 
@@ -180,14 +181,24 @@ def catalog():
             a["state"] = "running" if all(x == "running" for x in st) else "missing" if all(x == "missing" for x in st) else "stopped"
         a["memory_now_mb"] = sum(mem.get(x, 0) for x in a["services"]) or None
         out.append(a)
+    newer = _versions.available(DATA, _custom.load(DATA))
     for a in _custom.view(DATA):
         a["state"] = None if cs is None else cs.get(a["id"], "missing")
         a["memory_now_mb"] = mem.get(a["id"])
+        if a["id"] in newer:
+            a["newer"], a["major"], a["current"] = newer[a["id"]]["newest"], newer[a["id"]]["major"], a["what"].rpartition(":")[2]
         out.append(a)
     core = [{"id": n, "title": "Telegram assistant" if n == "telegram-bot" else app_name(n).split(" (")[0], "state": None if cs is None else cs.get(n, "missing"),
              "memory_now_mb": mem.get(n)} for n in _apps.CORE]
     reboot = safe(lambda: bool(json.load(open(f"{DATA}/agent.json")).get("reboot")), False)
     return {"apps": out, "core": core, "docker": cs is not None, "helper": not CAPS.missing(["host_agent"]), "reboot": reboot, "working": apps_log_tail()}
+
+
+def check_versions():
+    """Asks each registry for newer versions of the apps you added yourself. The morning recap and Settings, Apps then say so."""
+    mine = _custom.load(DATA)
+    if mine:
+        _versions.check_all(DATA, mine)
 
 
 def restart_app(name, msg=None):
@@ -365,6 +376,8 @@ def register(app):
     host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
 
     router = app.router
+    from core.scheduler import Job
+    app.scheduler.add(Job("New versions of your apps", check_versions, at=[(10, 15)], weekdays=[0]))  # Mondays; it only tells you
 
     @router.get("/server/apps")
     def server_apps(req):

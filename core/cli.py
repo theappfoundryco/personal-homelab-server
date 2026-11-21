@@ -15,6 +15,7 @@ import urllib.request
 
 from core import apps as _apps
 from core import custom as _custom
+from core import versions as _versions
 
 NAME = "homelab"
 BRANCH = "origin/main"
@@ -205,8 +206,13 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
         return 0
     if sub == "remove":
         return apps_cmd(c, "remove", rest) if rest else (c.out(f"  stop  Say which: {NAME} apps custom remove <name>") or 2)
+    if sub == "check":
+        return custom_check(c)
+    if sub == "update":
+        return custom_update(c, *rest[:2]) if rest else (c.out(f"  stop  Say which: {NAME} apps custom update <name> [version]") or 2)
     if sub != "add" or len(rest) != 3:
-        c.out(f"  stop  Use: {NAME} apps custom add <name> <image:version> <port>, {NAME} apps custom remove <name>, or {NAME} apps custom list")
+        c.out(f"  stop  Use: {NAME} apps custom add <name> <image:version> <port>, {NAME} apps custom update <name> [version], "
+              f"{NAME} apps custom check, {NAME} apps custom remove <name>, or {NAME} apps custom list")
         return 2
     app, why = _custom.check(c.data, {"title": rest[0], "image": rest[1], "port": rest[2], "inside": inside, "keep": keep, "group": group})
     if why:
@@ -217,6 +223,64 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
         return 2
     _custom.add(c.data, app)
     return apps_cmd(c, "add", [app["id"]])
+
+
+def custom_check(c, fetch=None):
+    """Asks each registry now whether your apps have a newer version (the assistant does this every Monday by itself)."""
+    mine = _custom.load(c.data)
+    if not mine:
+        c.out(f"  None of your own apps yet. Add one with: {NAME} apps custom add <name> <image:version> <port>")
+        return 0
+    state = _versions.check_all(c.data, mine, **({"fetch": fetch} if fetch else {}), force=True)
+    for a in mine:
+        v = state.get(a["id"]) or {}
+        if v.get("failed"):
+            c.out(f"  warn  {a['title']}: its registry could not be asked (private, or no internet).")
+        elif v.get("newest") or v.get("major"):
+            c.out(f"  new   {_versions.sentence(a['title'], v, a['id'])}")
+        elif v:
+            c.out(f"  ok    {a['title']}: {v['current']} is the newest.")
+        else:
+            c.out(f"  ok    {a['title']}: pinned to a digest, so there is no version to compare.")
+    return 0
+
+
+def custom_update(c, app_id, tag=None):
+    """Moves one of your apps to a newer version (the newest found, or the one you name). Its data folder stays; if it does not start, it goes back."""
+    app = _custom.get(c.data, app_id)
+    if not app:
+        c.out(f"  stop  You have no app called {app_id}. See them with: {NAME} apps custom list")
+        return 2
+    parts = _versions.split(app["image"])
+    if not parts:
+        c.out(f"  stop  {app['title']} is pinned to a digest, so there is no version to move to. Remove it and add it again with the image you want.")
+        return 2
+    known = _versions.available(c.data, [app]).get(app_id) or {}
+    tag = tag or known.get("newest")
+    if not tag and known.get("major"):
+        c.out(f"  ok    {app['title']} is on the newest {parts[2].split('.')[0]}.x. {known['major']} is a bigger jump: read its release notes, then run: {NAME} apps custom update {app_id} {known['major']}")
+        return 0
+    if not tag:
+        c.out(f"  ok    {app['title']} is on the newest version known ({parts[2]}). Ask the registry again with: {NAME} apps custom check")
+        return 0
+    image = f"{app['image'].rpartition(':')[0]}:{tag}"
+    if not _custom.pinned(image) or tag == parts[2]:
+        c.out(f"  stop  {tag} is not a version to move to." if tag != parts[2] else f"  ok    {app['title']} already runs {tag}.")
+        return 2 if tag != parts[2] else 0
+    if not c.docker_ready():
+        return 1
+    old = dict(app)
+    _custom.add(c.data, {**app, "image": image})
+    _custom.write(c.data, {**app, "image": image})
+    c.out(f"  Moving {app['title']} from {parts[2]} to {tag}. Its data folder stays.")
+    if custom_compose(c, app_id, "up", "-d", stream=True)[0] == 0:
+        c.out(f"  ok    {app['title']} now runs {tag}.")
+        return 0
+    _custom.add(c.data, old)
+    _custom.write(c.data, old)
+    custom_compose(c, app_id, "up", "-d", stream=True)
+    c.out(f"  stop  {tag} did not download or start, so {app['title']} is back on {parts[2]}. Check the version exists, and see why with: docker logs {app_id}")
+    return 1
 
 
 def apps_cmd(c, action="list", names=()):
