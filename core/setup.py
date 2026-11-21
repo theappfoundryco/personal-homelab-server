@@ -124,6 +124,8 @@ class Setup:
         s = self.state()
         steps = (s or {}).get("steps", {})
         first_run = s is None and not telegram_on
+        if read_json(os.path.join(self.dir, "access.json"), {}).get("mode") in ("lan", "local"):  # chosen already, by install.sh or homelab access
+            steps = {**steps, "access": "done"}
         rows = [{"id": i, "title": t, "status": steps.get(i, "pending")} for i, t in STEPS]
         todo = [r["id"] for r in rows if r["status"] != "done"]
         dismissed = (s or {}).get("dismissed", [])

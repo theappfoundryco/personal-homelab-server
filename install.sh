@@ -565,6 +565,10 @@ if [ -n "$BIND" ]; then
     grep -v '^HL_BIND=' "$STACK/.env" > "$STACK/.env.new" || true
     printf 'HL_BIND=%s\n' "$BIND" >> "$STACK/.env.new"; mv "$STACK/.env.new" "$STACK/.env"; chmod 600 "$STACK/.env"
     ok "dashboard reachable from: $([ "$BIND" = 0.0.0.0 ] && echo 'your network (PIN required for changes)' || echo 'this machine only')"
+    # what homelab access writes too, so the setup wizard shows this choice as made instead of asking again
+    if [ "$BIND" = 0.0.0.0 ]; then AIP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"; [ -n "$AIP" ] || AIP="$(ipconfig getifaddr en0 2>/dev/null || true)"
+      printf '{"mode": "lan", "url": "%s"}\n' "${AIP:+http://$AIP:$HL_PORT}" > "$DATA/access.json"
+    else printf '{"mode": "local", "url": ""}\n' > "$DATA/access.json"; fi
   fi
 fi
 

@@ -396,7 +396,10 @@ esac''', "hostname": 'echo "192.168.1.20 10.0.0.5"'}
         self.assertEqual(rc, 0, out)
         self.assertIn("HL_BIND=0.0.0.0\n", self.env())
         self.assertIn("your network", out)
+        access = os.path.join(self.home, "data", "access.json")
+        self.assertEqual(json.load(open(access))["mode"], "lan")  # so the setup wizard does not ask again
         self.assertEqual(self.run_it("--no-open", "--local")[0], 0)
+        self.assertEqual(json.load(open(access)), {"mode": "local", "url": ""})
         self.assertEqual([l for l in self.env().splitlines() if l.startswith("HL_BIND=")], ["HL_BIND=127.0.0.1"])
         self.assertIn("HL_BIND=127.0.0.1\n", self.env())
 

@@ -61,6 +61,15 @@ class Progress(unittest.TestCase):
         self.assertEqual([c["id"] for c in s.view(False)["checklist"]], ["ai"])
         self.assertEqual([c["id"] for c in s.view(False, ["calendar"])["checklist"]], ["ai", "calendar"])
 
+    def test_access_chosen_by_the_installer_counts_as_done(self):
+        # e2e: install.sh opened the dashboard to the home network, then the wizard called Access skipped and asked again
+        s, d = make()
+        s.mark("access", "skipped")
+        json.dump({"mode": "lan", "url": "http://192.168.1.20:3095"}, open(os.path.join(d, "access.json"), "w"))
+        v = s.view(False)
+        self.assertEqual(v["steps"][4]["status"], "done")
+        self.assertNotIn("access", [c["id"] for c in v["checklist"]])
+
     def test_unknown_steps_and_statuses_are_refused(self):
         s, _ = make()
         self.assertFalse(s.mark("nope", "done"))
