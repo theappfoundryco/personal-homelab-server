@@ -362,6 +362,16 @@ if [ "$DRY" != 1 ] && tags="$(curl -fs -m 2 http://127.0.0.1:11434/api/tags 2>/d
   HOST_OLLAMA=1; n="$(printf '%s' "$tags" | grep -o '"name"' | wc -l | tr -d ' ')"
   ok "found Ollama already running here, with $n model(s). The assistant will use it."
   grep -q '^ollama:' "$STACK/config.yaml" || printf '\nollama:\n  url: "http://host.docker.internal:11434"   # the Ollama already running on this machine (found by install.sh)\n' >> "$STACK/config.yaml"
+  # On Linux, Ollama answers only this machine itself unless told otherwise, and the apps in Docker count as other machines
+  if [ "$OS" != mac ]; then
+    ip="$(hostname -I 2>/dev/null || true)"; ip="${ip%% *}"
+    if [ -n "$ip" ] && ! curl -fs -m 2 "http://$ip:11434/api/tags" >/dev/null 2>&1; then
+      warn "That Ollama only answers this machine itself, so the assistant in Docker cannot reach it yet."
+      say "        Let it listen beyond this machine (your home network can then use it too):"
+      say "          sudo systemctl edit ollama     and add the two lines  [Service]  and  Environment=\"OLLAMA_HOST=0.0.0.0\""
+      say "          sudo systemctl restart ollama"
+    fi
+  fi
 fi
 APPS_PY="from core import apps"
 if [ -f "$DATA/apps.json" ]; then ok "apps kept: $(PYTHONPATH="$HERE" python3 -c "$APPS_PY; print(', '.join(apps.chosen('$DATA')) or 'none')" 2>/dev/null || echo 'as before')"

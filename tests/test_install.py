@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REAL_TOOLS = "bash env sh cat sed grep awk tr head mkdir cp chmod dirname readlink seq date python3 rm mv printf ln touch id tail".split()
+REAL_TOOLS = "bash env sh cat sed grep awk tr head mkdir cp chmod dirname readlink seq date python3 rm mv printf ln touch id tail wc".split()
 
 STUBS = {
     "uname": 'case "$1" in -s) echo "${FAKE_OS:-Linux}";; -r) echo "${FAKE_REL:-6.8.0}";; -m) echo x86_64;; *) echo "${FAKE_OS:-Linux}";; esac',
@@ -87,6 +87,24 @@ class Installer(unittest.TestCase):
         self.assertEqual(json.load(open(os.path.join(self.home, "data", "apps.json"))), {"apps": ["open-webui", "monitoring"]})
         rc, out = self.run_it("--no-open", HL_APPS="")
         self.assertIn("apps kept: open-webui, monitoring", out)
+
+    def test_an_ollama_already_here_is_used_and_a_loopback_only_one_gets_the_fix(self):
+        ollama = {"curl": '''echo "curl $*" >> "$FAKE_LOG"
+case "$*" in
+  *127.0.0.1:11434*) echo '{"models":[{"name":"qwen3.5:4b"}]}' ;;
+  *192.168.1.20:11434*) [ "${FAKE_LAN_OLLAMA:-0}" = 1 ] && echo '{"models":[]}' || exit 7 ;;
+esac''', "hostname": 'echo "192.168.1.20 10.0.0.5"'}
+        self.stub("curl", "hostname", table=ollama)
+        rc, out = self.run_it("--no-open")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("found Ollama already running here", out)
+        self.assertIn("HL_OLLAMA_URL=http://host.docker.internal:11434", open(os.path.join(self.app, "stack", ".env")).read())  # AI chat uses it too
+        self.assertIn("only answers this machine itself", out)
+        self.assertIn('OLLAMA_HOST=0.0.0.0', out)
+        shutil.rmtree(self.home)
+        rc, out = self.run_it("--no-open", FAKE_LAN_OLLAMA="1")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("only answers this machine itself", out)  # it already listens beyond this machine
 
     def test_happy_path_on_linux(self):
         rc, out = self.run_it("--no-open")
