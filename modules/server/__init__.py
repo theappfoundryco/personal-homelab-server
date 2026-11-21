@@ -488,6 +488,34 @@ def register(app):
             return {"ok": False, "saved": app["id"], "msg": f"Saved, but not started: {why} {run_in(cli)}:", "cmds": [f"{cli} apps add {app['id']}"]}
         return {"ok": True, "id": app["id"], "msg": f"Adding {app['title']}. The first time downloads it, which can take a few minutes."}
 
+    @router.post("/server/apps/store")
+    def server_apps_store(req):
+        """Add an app from the CasaOS store by name: the store's file is fetched now and checked like any app you add, then the host helper starts it."""
+        from core import casaos
+        from core.settings import guard_request
+        if bad := guard_request(SETTINGS, req):
+            return bad
+        b = req.json() or {}
+        name, spec, notes = casaos.prepare(str(b.get("name") or "").strip(), port=b.get("port") or None)
+        if not name:
+            return {"ok": False, "msg": spec, "matches": notes[:8]}, 400
+        try:
+            live = http(f"{DOCKER}/containers/json?all=1", timeout=10)
+        except Exception:
+            live = []
+        taken = {p.get("PublicPort") for x in live for p in x.get("Ports") or [] if p.get("PublicPort")}
+        app, why = _custom.check(DATA, spec, taken, {n.lstrip("/") for x in live for n in x.get("Names") or []})
+        if why:
+            return {"ok": False, "msg": why + (" Type another port and try again." if "Port" in why else ""), "port": "Port" in why}, 400
+        _custom.add(DATA, app)
+        r = host_action("add", app["id"])
+        if not r.get("ok"):
+            from core.setup import cli_name, run_in
+            cli = cli_name(DATA)
+            why = (r.get("msg") or "The host helper did not answer.").rstrip(".") + "."
+            return {"ok": False, "saved": app["id"], "msg": f"Saved, but not started: {why} {run_in(cli)}:", "cmds": [f"{cli} apps add {app['id']}"], "notes": notes}
+        return {"ok": True, "id": app["id"], "msg": f"Adding {app['title']} on port {app['port']}. The first time downloads it, which can take a few minutes.", "notes": notes}
+
     @router.get("/server/status")
     def server_status(req):
         """What the Home status line needs. Monitoring and the Docker reader are optional apps, so a missing one is

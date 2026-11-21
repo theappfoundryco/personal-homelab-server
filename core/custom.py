@@ -1,4 +1,4 @@
-"""Apps you add yourself: any Docker image, pinned to a version, with one port and an optional folder to keep.
+"""Apps you add yourself: any Docker image, pinned to a version, with one port, optional folders to keep and optional settings.
 
 The list lives in custom.json in the data folder, so the dashboard, the host helper and the command line read the same one.
 Each app gets its own compose file in <data>/custom and its own compose project, so updates never touch it.
@@ -15,6 +15,7 @@ NAME = re.compile(r"^[a-z][a-z0-9-]{1,29}$")
 TAG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 REPO = re.compile(r"^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)*$")
 KEEP = re.compile(r"^/[A-Za-z0-9_./-]{0,120}$")
+ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 GROUPS = ("apps", "tools")
 LABEL = "homelab.custom"
 # ports the built-in apps publish (installed or not), so a later Add of a built-in never clashes; tests check this against compose.yaml
@@ -76,12 +77,23 @@ def _port(v):
     return p if 1024 <= p <= 65535 else None
 
 
+def _inside(v):
+    """The port the app listens on inside its container: any port, since nothing outside sees it (80 is fine there)."""
+    try:
+        p = int(str(v).strip())
+    except ValueError:
+        return None
+    return p if 1 <= p <= 65535 else None
+
+
 def check(data_dir, spec, taken=(), containers=()):
-    """-> (app, None) ready to save, or (None, what is wrong). taken: ports in use now; containers: names of containers that exist now."""
+    """-> (app, None) ready to save, or (None, what is wrong). taken: ports in use now; containers: names of containers that exist now.
+    Optional: more (up to 4 more folders to keep), env (the app's own settings, as name: value), command (its start command, as a list)
+    and user (who it runs as, like 1000:1000). None of them gives the app more power over the machine."""
     title = str(spec.get("title") or spec.get("name") or "").strip()[:40]
     app_id = slug(spec.get("id") or title)
     image = str(spec.get("image") or "").strip()
-    port, inside = _port(spec.get("port")), _port(spec.get("inside") or spec.get("port"))
+    port, inside = _port(spec.get("port")), _inside(spec.get("inside") or spec.get("port"))
     keep = str(spec.get("keep") or "").strip()
     group = spec.get("group") or "apps"
     mine = ids(data_dir)
@@ -106,7 +118,29 @@ def check(data_dir, spec, taken=(), containers=()):
         return None, "The folder to keep is a path inside the app, like /config."
     if group not in GROUPS:
         return None, "Choose Everyday apps or Tools."
-    return {"id": app_id, "title": title, "image": image, "port": port, "inside": inside, "keep": keep, "group": group}, None
+    more = [str(m).strip() for m in spec.get("more") or []]
+    if len(more) > 4 or any(not KEEP.match(m) or ".." in m.split("/") or m == "/" for m in more) or len(set(more + [keep])) != len(more) + 1:
+        return None, "The other folders to keep are paths inside the app, like /data, up to 4, each once."
+    env = spec.get("env") or {}
+    if not isinstance(env, dict) or len(env) > 60 or any(not ENV_KEY.match(str(k)) or not isinstance(v, (str, int)) or len(str(v)) > 500
+                                                         or any(ch in str(v) for ch in "\n\r\0") for k, v in env.items()):
+        return None, "The app's settings must be up to 60 lines of NAME: value."
+    command = spec.get("command") or []
+    if not isinstance(command, list) or len(command) > 30 or any(not isinstance(c, str) or len(c) > 300 or any(ch in c for ch in "\n\r\0") for c in command):
+        return None, "The start command must be up to 30 short words."
+    user = str(spec.get("user") or "").strip()
+    if user and not re.match(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$", user):
+        return None, "Who the app runs as looks like 1000:1000."
+    app = {"id": app_id, "title": title, "image": image, "port": port, "inside": inside, "keep": keep, "group": group}
+    if command:
+        app["command"] = command
+    if user:
+        app["user"] = user
+    if more and keep:
+        app["more"] = more
+    if env:
+        app["env"] = {str(k): str(v) for k, v in env.items()}
+    return app, None
 
 
 def add(data_dir, app):
@@ -138,10 +172,19 @@ def compose_text(app):
     q = json.dumps
     lines = ["# Written by homelab from custom.json. Change it in Settings, Apps, or with: homelab apps custom",
              f"name: {q(project(app['id']))}", "services:", f"  {app['id']}:", f"    image: {q(app['image'])}", f"    container_name: {q(app['id'])}",
-             "    restart: unless-stopped", f"    labels: {{{q(LABEL)}: {q(app['id'])}}}", "    environment: {TZ: \"${HL_TIMEZONE:-UTC}\"}",
+             "    restart: unless-stopped", f"    labels: {{{q(LABEL)}: {q(app['id'])}}}",
+             "    environment: {TZ: \"${HL_TIMEZONE:-UTC}\"" + "".join(f", {q(str(k))}: {q(str(v).replace('$', '$$'))}" for k, v in (app.get("env") or {}).items()) + "}",
              f"    ports: [\"${{HL_BIND:-127.0.0.1}}:{int(app['port'])}:{int(app['inside'])}\"]"]
-    if app.get("keep"):
-        lines += [f"    volumes: [{q(volume(app['id']) + ':' + app['keep'])}]", "volumes:", f"  {volume(app['id'])}:", f"    name: {q(volume(app['id']))}"]
+    if app.get("command"):
+        lines.append("    command: [" + ", ".join(q(c.replace("$", "$$")) for c in app["command"]) + "]")
+    if app.get("user"):
+        lines.append(f"    user: {q(app['user'])}")
+    keeps = ([app["keep"]] + list(app.get("more") or [])) if app.get("keep") else []
+    if keeps:
+        names = [volume(app["id"])] + [f"{volume(app['id'])}-{i}" for i in range(2, len(keeps) + 1)]  # the first keeps the name it always had
+        lines += ["    volumes: [" + ", ".join(q(n + ":" + k) for n, k in zip(names, keeps)) + "]", "volumes:"]
+        for n in names:
+            lines += [f"  {n}:", f"    name: {q(n)}"]
     return "\n".join(lines) + "\n"
 
 

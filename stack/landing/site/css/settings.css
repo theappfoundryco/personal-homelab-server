@@ -18,6 +18,7 @@
 .srow .mini svg { width: var(--g-sm); height: var(--g-sm); }
 .srow .mini[disabled] { opacity: .35; }
 .sfield { display: block; margin-top: var(--sp-3); }
+.sfield[hidden] { display: none; }
 .sfield > span { display: flex; align-items: baseline; justify-content: space-between; font-size: var(--t-sm); color: var(--muted); margin: 0 var(--sp-1) var(--sp-1); }
 .sfield > span button { font-size: var(--t-sm); font-weight: 500; color: var(--muted); text-decoration: underline; }
 .sfield input, .sfield select { width: 100%; height: var(--h-field); padding: 0 var(--sp-3); border-radius: var(--r-md); background: var(--card); box-shadow: var(--shadow); border: var(--hair) solid transparent; }
