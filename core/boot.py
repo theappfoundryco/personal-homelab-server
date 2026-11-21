@@ -249,9 +249,16 @@ from modules.health import BARE_DONE, bare_done, check_meds, check_sg, med_snooz
 # ================================================================ small API for the landing page
 ROUTER = _http_api.Router(log=print)
 CAPS = _capabilities.Capabilities()
+LOOPBACK_HINT = ("On Linux, an Ollama outside Docker answers only the machine itself until told otherwise: "
+                 "run sudo systemctl edit ollama, add [Service] and Environment=\"OLLAMA_HOST=0.0.0.0\", then sudo systemctl restart ollama.")
+
+
 def _ollama_check():
     ok, why = _llm.Ollama(OLLAMA).available()
-    return ok, re.sub(r"\s*\([^)]*\)", "", why.replace(_llm.FIX, "")).strip()  # the fix is shown on its own line; no raw error codes
+    why = re.sub(r"\s*\([^)]*\)", "", why.replace(_llm.FIX, "")).strip()  # the fix is shown on its own line; no raw error codes
+    if not ok and "host.docker.internal" in OLLAMA:  # the one already on this machine: running, but maybe only listening to itself
+        why = f"{why} {LOOPBACK_HINT}".strip()
+    return ok, why
 
 
 CAPS.register("ollama", "AI (Ollama)", _ollama_check, "Start Ollama, or turn the AI features off in config.yaml.",
