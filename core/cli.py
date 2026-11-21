@@ -346,7 +346,8 @@ def lan_ip(c):
 
 
 def access(c, mode):
-    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only). Restarts only the dashboard."""
+    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only).
+    Restarts only the dashboard, the ntfy app when you have it (your phone subscribes to it) and your own apps."""
     if mode == "lan":
         try:
             with open(os.path.join(c.data, "settings.json")) as f:
@@ -375,7 +376,7 @@ def access(c, mode):
             json.dump({"mode": mode, "url": f"http://{ip}:{c.port}" if ip else ""}, f)
     except OSError:
         pass
-    rc = c.compose("up", "-d", "landing", stream=True)[0]
+    rc = c.compose("up", "-d", "landing", *(["ntfy"] if "ntfy" in _apps.chosen(c.data) else []), stream=True)[0]
     for n in _custom.ids(c.data):  # your own apps follow the same setting
         if os.path.exists(_custom.compose_path(c.data, n)):
             custom_compose(c, n, "up", "-d", stream=True)

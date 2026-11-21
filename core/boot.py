@@ -21,7 +21,7 @@ from urllib.parse import quote, urlencode, urlparse, parse_qs
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from core import capabilities as _capabilities, config as _config, helpers as _helpers, http_api as _http_api, llm as _llm, store as _store
+from core import capabilities as _capabilities, config as _config, helpers as _helpers, http_api as _http_api, llm as _llm, notify as _notify, store as _store
 from core.telegram import client as _telegram
 from core import app as _app, host as _host, registry as _registry, scheduler as _scheduler
 
@@ -59,7 +59,7 @@ APPS = {"n8n": "Automations (n8n)", "ollama": "AI engine (Ollama)", "open-webui"
         "grafana": "Charts (Grafana)", "uptime-kuma": "Website monitor",
         "landing": "Home page", "homepage": "Full dashboard", "searxng": "Private search", "adguard": "Ad blocker (AdGuard)",
         "prometheus": "Metrics (Prometheus)", "cadvisor": "Container metrics", "node-exporter": "Server metrics",
-        "dozzle": "Logs viewer", "watchtower": "Auto-updater", "whisper": "Voice to text", "docker-proxy": "Docker reader",
+        "dozzle": "Logs viewer", "ntfy": "Phone alerts (ntfy)", "watchtower": "Auto-updater", "whisper": "Voice to text", "docker-proxy": "Docker reader",
         "telegram-bot": "This bot"}
 ALWAYS_ON = [a for a in APPS if a != "telegram-bot"]
 app_name = lambda c: APPS.get(c, c)
@@ -81,6 +81,21 @@ esc, strip_tags, now = _helpers.esc, _helpers.strip_tags, _helpers.now
 
 def send(text, buttons=None, keyboard=None, silent=False):
     return TG.send(text, buttons, keyboard, silent)
+
+
+# The assistant's own pushes (alerts, reminders, update reports) also go to ntfy or Apprise when config.yaml's notify: says so,
+# and to the ntfy app on this machine while it is installed (Settings, Apps) and notify.ntfy is not set.
+from core import apps as _apps
+def _local_ntfy():
+    return f"{_notify.LOCAL}/{_notify.local_topic(DATA)}" if "ntfy" in _apps.chosen(DATA) else None
+
+
+NOTIFY = _notify.Notifier(cfg("notify", {}), TG.send, lambda: TG.enabled, os.environ.get("HL_NTFY_TOKEN", ""), local=_local_ntfy)
+CONFIG.problems += _notify.problems(cfg("notify", {}), local="ntfy" in _apps.chosen(DATA))
+
+
+def notify(text, buttons=None, silent=False):
+    return NOTIFY.send(text, buttons, silent)
 
 
 def edit(msg, text, buttons=None):
@@ -246,6 +261,9 @@ CAPS.register("calendar", "Calendar", lambda: (os.path.exists(ICS_FILE), "No cal
               off=lambda: "No calendar added. Add one in the setup wizard to see your day.")
 CAPS.register("telegram", "Telegram", lambda: (bool(TOKEN and OWNER), "No Telegram bot is set up, so there is no chat."), "Add the bot token and your chat id in the setup wizard.", ttl=300,
               off=lambda: "" if TOKEN else "Telegram is not connected. Connect it in the setup wizard to chat with the assistant.")
+CAPS.register("push", "Phone alerts (ntfy or Apprise)", lambda: NOTIFY.status() if NOTIFY.extra() else (False, "No ntfy or Apprise address is set."),
+              "Check the address under notify: in config.yaml, and that the server answers.", ttl=60,
+              off=lambda: "" if NOTIFY.extra() else "Alerts go to Telegram only. For your phone without Telegram, add Phone alerts (ntfy) in Settings, Apps, or set notify: in config.yaml.")
 CAPS.register("whisper", "Voice to text (Whisper)", lambda: _capabilities.reachable(WHISPER), "Start the Whisper container, or leave voice notes off.", ttl=60,
               off=lambda: "" if "whisper" in _apps.chosen(DATA) else "Voice to text is not installed. Add it in Settings, Apps.")
 CAPS.register("docker_reader", "Docker reader", lambda: _capabilities.reachable(f"{DOCKER}/_ping"), "Start the docker-proxy container to see and restart apps.", ttl=60)
@@ -290,7 +308,7 @@ _host.provide(**{n: globals()[n] for n in _handlers.NEEDS})
 _handlers.bind()
 HELP = _handlers.HELP
 _host.provide(llm_json=llm_json, nudged=nudged, edit=edit, U=U, nice_when=nice_when, has_calendar=has_calendar, CLAUDE_KEY=CLAUDE_KEY, SYSTEM=SYSTEM, count_tokens=count_tokens, cricket_lines=cricket_lines, f1_lines=f1_lines, llm_stream=llm_stream,
-              run_info=run_info, run_job=run_job, run_purpose=run_purpose, stream_to_chat=stream_to_chat, typing=typing, send=send, B=B, location=location, geocode=geocode, HOME=HOME, TZ=TZ, FLIGHT=FLIGHT, ICS_FILE=ICS_FILE, t12_range=t12_range,
+              run_info=run_info, run_job=run_job, run_purpose=run_purpose, stream_to_chat=stream_to_chat, typing=typing, send=send, notify=notify, NOTIFY=NOTIFY, B=B, location=location, geocode=geocode, HOME=HOME, TZ=TZ, FLIGHT=FLIGHT, ICS_FILE=ICS_FILE, t12_range=t12_range,
               NAME=NAME, _lock=_lock, day_events=day_events, extras=extras, save=save, state=state,
               CAPS=CAPS, cannot=_chat.cannot, DASH=DASH, OLLAMA=OLLAMA, OWNER=OWNER, _digest_lock=_digest_lock, _journal_morning=_journal_morning, _tag=_tag, ai_loaded=ai_loaded, big_call=big_call,
               claim=claim, claimed_run=claimed_run, gym=gym, journal_week_lines=journal_week_lines, tomorrow_weather=tomorrow_weather, events_for=events_for, journal_day=journal_day, FEEDS=FEEDS, event_line=event_line, feed_items=feed_items, flight_text=flight_text, headlines_for=headlines_for, last_headlines=last_headlines, live_digest=live_digest,
