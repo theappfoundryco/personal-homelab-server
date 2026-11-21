@@ -170,12 +170,14 @@ async function setAppsPage(body) {
   const btn = (a) => appsBusy[a.id] ? '' : a.custom && a.state !== 'running' && a.state !== 'stopped' ? `<span class="sacts"><button class="sact" data-app-add="${esc(a.id)}"${r.docker ? '' : ' disabled'}>Start</button><button class="sact" data-app-rm="${esc(a.id)}">Remove</button></span>`
     : a.state === 'missing' || a.state == null ? `<button class="sact" data-app-add="${esc(a.id)}"${r.docker ? '' : ' disabled'}>Add</button>`
     : `<button class="sact" data-app-rm="${esc(a.id)}">Remove</button>`;
+  const newer = (a) => (a.newer ? `<small class="warnline">Version ${esc(a.newer)} is out (you have ${esc(a.current)}). Move to it in your terminal:</small>${cmdHTML(hlCmd('apps custom update ' + a.id))}` : '')
+    + (a.major ? `<small class="warnline">${a.newer ? `A bigger jump, ${esc(a.major)}, is out too` : `Version ${esc(a.major)} is out (you have ${esc(a.current)}), a bigger jump`}. Read its release notes first, then:</small>${cmdHTML(hlCmd(`apps custom update ${a.id} ${a.major}`))}` : '');
   // the ntfy app says where your phone subscribes: this machine's address (as you opened the dashboard) and the private topic
   // localhost means nothing on a phone: then it says how to open the dashboard (and so this app) to the phone first
   const near = /^(localhost|127\.|\[?::1)/.test(HOST);
   const how = (a) => a.subscribe ? `In the ntfy phone app, add the server ${near ? 'at this machine\u2019s address' : appURL(a.subscribe.port)}${near ? `, port ${a.subscribe.port},` : ''} and subscribe to ${a.subscribe.topic}.`
     + (near ? ' Your phone can reach it once the dashboard opens on your home network or Tailscale (Settings, Who can open the dashboard).' : '') : a.note || '';
-  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${how(a) ? `<small>${esc(how(a))}</small>` : ''}</span>${btn(a)}</div>`;
+  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${how(a) ? `<small>${esc(how(a))}</small>` : ''}${newer(a)}</span>${btn(a)}</div>`;
   const groups = [...new Set(r.apps.map((a) => a.group))];
   const used = [...r.core, ...r.apps].reduce((n, a) => n + (a.memory_now_mb || 0), 0);
   body.innerHTML = `<div class="snote"><b>The dashboard and the assistant always run.</b> Add the extras you want; you can remove them any time and their data is kept.${used ? ` Apps are using ${mbText(used)} of memory right now.` : ''}</div>`

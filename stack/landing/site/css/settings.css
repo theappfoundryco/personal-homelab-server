@@ -46,7 +46,7 @@
 .srow .sacts { flex: none; display: flex; gap: var(--sp-2); }
 .ntime { flex: none; height: var(--h-chip); padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--raised); color: var(--text); font-size: var(--t-sm); }
 .sch .sinline { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); color: var(--muted); font-size: var(--t-sm); }
-.sch .warnline { color: var(--warn); }
+.srow .warnline { color: var(--warn); }
 .sch .sfield input { background: var(--raised); box-shadow: none; }
 .sch [hidden] { display: none; }
 .sgo { width: 100%; text-align: left; color: inherit; text-decoration: none; }

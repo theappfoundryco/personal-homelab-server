@@ -70,6 +70,8 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 
 You pick them during setup or later with `homelab apps`. Nothing is installed that you did not choose.
 
+You can add any other Docker image as your own app, pinned to a version. Every Monday the assistant asks its registry whether a newer version is out and says so in the morning recap and in Settings, Apps. It never updates anything by itself.
+
 | App | What it is for |
 |---|---|
 | Local AI engine (Ollama) | Runs AI models on this machine for chat, journal summaries and news. |
@@ -135,6 +137,7 @@ If `homelab` is not found, run `~/personal-homelab-server/bin/homelab path add` 
 | `homelab doctor` | the full health check, with a fix for each problem |
 | `homelab modules` | list modules, or turn one on or off |
 | `homelab apps` | list the optional apps, or add or remove them |
+| `homelab apps custom add`, `check`, `update <name> [version]` | add any Docker image as your own app, see whether a newer version is out, and move to it (it goes back if the new one will not start) |
 | `homelab backup`, `homelab restore` | save your data and settings to one file, bring it back |
 | `homelab offsite setup <address>`, `offsite backup`, `offsite list`, `offsite restore [id]` | an encrypted copy in storage you choose, made, listed and brought back |
 | `homelab access` | who can open the dashboard: this machine only, or your home network with a PIN |
