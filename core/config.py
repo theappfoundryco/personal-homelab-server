@@ -11,6 +11,7 @@ ZONE = "timezone"  # an IANA name like "Europe/London"
 # name -> type. A dict is a section, a list holds one entry type, str/bool/int/float/TIME/ZONE are values.
 SCHEMA = {
     "owner": {"name": str},
+    "homeassistant": {"url": str, "allow_unlock": bool},
     "timezone": ZONE,
     "home": {"city": str, "country": str, "lat": float, "lon": float, "tz": ZONE},
     "dashboard_url": str,

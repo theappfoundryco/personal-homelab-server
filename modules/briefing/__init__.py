@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from core import app as _app
 from core import custom as _custom
 from core import host
 from core import versions as _versions
@@ -161,6 +162,9 @@ def build_briefing(recap=False):
         sections.append(("💾", "BACKUPS", "", [(esc(line), line)]))
         if ups := safe(lambda: _versions.news(DATA, _custom.load(DATA)), []):
             sections.append(("⬆️", "NEW VERSIONS", "", [(f"• {esc(u)}", f"• {u}") for u in ups]))
+    for more in _app.BRIEF_LINES:  # sections modules add (your home, from Home Assistant)
+        for icon, name, lines in safe(more, []) or []:
+            sections.append((icon, name, "", [(esc(l), l) for l in lines]))
     gs = [g for g in state.get("goals", []) if not g.get("achieved")]
     if gs:  # his life goals close the briefing
         sections.append(("🎯", "GOALS", "", [(f"• {esc(g['text'])}", f"• {g['text']}") for g in gs]))
