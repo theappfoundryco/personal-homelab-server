@@ -1,4 +1,5 @@
-"""Quiet alerts: server problems, F1 and flight changes. Recorded for the morning recap, not pushed at you."""
+"""Quiet alerts: server problems, F1 and flight changes. Recorded for the morning recap, not pushed at you.
+What is pushed goes through notify(): Telegram, plus ntfy or Apprise when config.yaml's notify: sets them up."""
 import json
 import re
 import time
@@ -34,13 +35,13 @@ def check_server():
             down_count[n] = 0
     t = one(f"avg_over_time({TEMP}[10m])")
     if t and t > 92 and once(f"hot:{now():%Y%m%d%H}"):
-        send(f"🌡 The server has been running hot ({t:.0f}°C) for 10 minutes. Check that its vents aren't blocked.")
+        notify(f"🌡 The server has been running hot ({t:.0f}°C) for 10 minutes. Check that its vents aren't blocked.")
     disk = one('(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100')
     if disk and disk > 85 and once(f"disk:{now():%Y%m%d}"):
-        send(f"💾 Storage is {disk:.0f}% full. Time to clean up.")
+        notify(f"💾 Storage is {disk:.0f}% full. Time to clean up.")
     ssd = (daily() or {}).get("ssd") or {}
     if ssd.get("issues") and once(f"ssd:{now():%Y%m%d}"):
-        send("🩺 <b>SSD health warning</b>\n" + "\n".join(f"• {esc(i)}" for i in ssd["issues"]) + "\nMake sure backups are working.")
+        notify("🩺 <b>SSD health warning</b>\n" + "\n".join(f"• {esc(i)}" for i in ssd["issues"]) + "\nMake sure backups are working.")
 
 
 def updates_message(report):
@@ -81,14 +82,14 @@ def check_f1():
         t = f1_when(s)
         mins = (t - now()).total_seconds() / 60
         if 0 < mins <= 65 and once(f"f1:{race['round']}:{label}"):
-            send(f"🏎 <b>{esc(race['raceName'])}</b>\n{label} starts at <b>{t:%-I:%M %p}</b> (in about {round(mins)} minutes)",
+            notify(f"🏎 <b>{esc(race['raceName'])}</b>\n{label} starts at <b>{t:%-I:%M %p}</b> (in about {round(mins)} minutes)",
                  [[U("F1 live", "https://www.formula1.com/en/timing/f1-live")]])
     # Results: after the last race finished (checked for 2 days)
     try:
         last = jolpica("last/results")["RaceTable"]["Races"][0]
         if (now() - f1_when(last)).days < 2 and once(f"f1res:{last['season']}:{last['round']}"):
             res = last["Results"][:3]
-            send(f"🏁 <b>{esc(last['raceName'])} result</b>\n🥇 {res[0]['Driver']['givenName']} {res[0]['Driver']['familyName']} ({res[0]['Constructor']['name']})\n"
+            notify(f"🏁 <b>{esc(last['raceName'])} result</b>\n🥇 {res[0]['Driver']['givenName']} {res[0]['Driver']['familyName']} ({res[0]['Constructor']['name']})\n"
                  f"🥈 {res[1]['Driver']['familyName']}  🥉 {res[2]['Driver']['familyName']}")
     except Exception:
         pass
@@ -108,17 +109,17 @@ def check_cricket():
         prev = cricket_seen.get(link)
         if prev is None:
             if once(f"cric:{link}"):
-                send(f"🏏 <b>India match is on</b>\n{esc(i['title'])}", [[U("Live score", i["link"])]])
+                notify(f"🏏 <b>India match is on</b>\n{esc(i['title'])}", [[U("Live score", i["link"])]])
             cricket_seen[link] = {"sent": i["title"], "last": i["title"], "t": time.time()}
         else:
             prev["last"] = i["title"]
             if i["title"] != prev["sent"] and time.time() - prev["t"] > 3600:  # hourly score update
-                send(f"🏏 {esc(i['title'])}", [[U("Live score", i["link"])]], silent=True)
+                notify(f"🏏 {esc(i['title'])}", [[U("Live score", i["link"])]], silent=True)
                 prev.update(sent=i["title"], t=time.time())
     for link in list(cricket_seen):
         if link not in india:
             if once(f"cricend:{link}"):
-                send(f"🏁 <b>India match finished</b>\nLast score: {esc(cricket_seen[link]['last'])}", [[U("Result", link)]])
+                notify(f"🏁 <b>India match finished</b>\nLast score: {esc(cricket_seen[link]['last'])}", [[U("Result", link)]])
             del cricket_seen[link]
 
 
@@ -126,9 +127,9 @@ def check_flights():
     for f in flights(2):
         key = f"{f['start']:%Y%m%d%H%M}"
         if timedelta(0) <= now() - f["checkin"] < timedelta(minutes=30) and once(f"checkin:{key}"):
-            send(f"🛫 <b>Check-in is open</b> for {esc(f['title'])} ({nice_when(f['start'])}).\nCheck in online now to pick a good seat.")
+            notify(f"🛫 <b>Check-in is open</b> for {esc(f['title'])} ({nice_when(f['start'])}).\nCheck in online now to pick a good seat.")
         if timedelta(0) <= f["leave_by"] - now() <= timedelta(minutes=45) and once(f"leave:{key}"):
-            send(f"🚕 <b>Time to get ready!</b>\nLeave for the airport by <b>{f['leave_by']:%-I:%M %p}</b>. Your flight departs at {f['start']:%-I:%M %p}.\n"
+            notify(f"🚕 <b>Time to get ready!</b>\nLeave for the airport by <b>{f['leave_by']:%-I:%M %p}</b>. Your flight departs at {f['start']:%-I:%M %p}.\n"
                  "Passport ✓ Phone & charger ✓ Wallet ✓")
 
 
@@ -145,7 +146,7 @@ def _routes(router):
         if raw is None:
             return {"ok": False}, 403
         if m := updates_message(raw):
-            safe(lambda: send(m, [[B("\U0001F5A5 Server status", "server")]], silent=True))
+            safe(lambda: notify(m, [[B("\U0001F5A5 Server status", "server")]], silent=True))
         return {"ok": True}
 
     @router.post("/alert")
@@ -160,5 +161,5 @@ def _routes(router):
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "B", "INDIA", "TEMP", "U", "_lock", "app_name", "containers", "cricket_items", "daily", "f1_when", "flights", "jolpica", "nice_when", "once", "one", "save", "send", "state")
+    host.need(globals(), "ALWAYS_ON", "B", "INDIA", "TEMP", "U", "_lock", "app_name", "containers", "cricket_items", "daily", "f1_when", "flights", "jolpica", "nice_when", "notify", "once", "one", "save", "state")
     _routes(app.router)

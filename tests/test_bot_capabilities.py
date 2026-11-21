@@ -13,9 +13,22 @@ class BotCaps(unittest.TestCase):
         srv.shutdown()
         self.assertEqual(code, 200)
         names = {c["name"]: c for c in body["capabilities"]}
-        self.assertEqual(set(names), {"ollama", "internet", "calendar", "gmail", "telegram", "whisper", "docker_reader", "host_agent"})
+        self.assertEqual(set(names), {"ollama", "internet", "calendar", "gmail", "telegram", "whisper", "docker_reader", "host_agent", "push", "offsite"})
         self.assertFalse(names["ollama"]["ok"])
         self.assertIn("Ollama", names["ollama"]["message"])
+
+    def test_an_unreachable_ollama_on_this_machine_says_how_to_let_docker_in(self):
+        bot = load_bot()
+        old = bot.OLLAMA
+        self.addCleanup(setattr, bot, "OLLAMA", old)
+        bot.OLLAMA = "http://host.docker.internal:11434"
+        ok, why = bot._ollama_check()
+        harness._net_calls.clear()
+        self.assertFalse(ok)
+        self.assertIn("OLLAMA_HOST=0.0.0.0", why)
+        bot.OLLAMA = "http://ollama:11434"  # the one in Docker: the hint would only confuse
+        self.assertNotIn("OLLAMA_HOST", bot._ollama_check()[1])
+        harness._net_calls.clear()
 
     def test_optional_names_are_known(self):
         """A module's optional: list may only name a capability or another module, so every entry gets a degrade test."""
