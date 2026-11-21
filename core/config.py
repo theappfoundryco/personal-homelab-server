@@ -20,7 +20,7 @@ SCHEMA = {
     "features": {"therapy_recap": bool},
     "support": {"therapist": str, "helpline_name": str, "helpline_tel": str},
     "therapy": {"calendar_words": [str]},
-    "night": {"journal": bool, "journal_at": TIME, "insights": bool, "backup": bool, "backup_at": TIME, "backup_to": str, "backup_keep": int,
+    "night": {"journal": bool, "journal_at": TIME, "insights": bool, "backup": bool, "backup_at": TIME, "backup_to": str, "backup_keep": int, "offsite": bool, "offsite_at": TIME,
               "github": bool, "github_repo": str, "github_at": TIME},  # what runs at night; the host helper does the backup and the GitHub copy
     "news": {"topics": [str], "feeds": [{"name": str, "url": str, "topic": str}], "ai": str, "model": str},  # ai: auto, claude, openai, ollama or none
     "notify": {"telegram": bool, "ntfy": str, "apprise": str},  # where alerts and reminders go besides chat; see core/notify.py

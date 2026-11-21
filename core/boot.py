@@ -278,6 +278,9 @@ from core import agent as _agent
 from core import apps as _apps
 CAPS.register("host_agent", "Host helper", lambda: (_agent.alive(DATA), "The host helper (restart and update) is not running."), "Install it with: homelab agent install", ttl=60,
               off=lambda: "" if os.path.exists(os.path.join(DATA, _agent.BEAT)) else "The host helper is not installed, so Restart, Update and Add ask you to run a command instead. Install it with: bin/homelab agent install")
+from core import offsite as _offsite
+CAPS.register("offsite", "Off-site copy", lambda: _offsite.check(DATA), "See why with: bin/homelab offsite backup", ttl=300,
+              off=lambda: "" if _offsite.read(DATA).get("set_up") else "No off-site copy is set up. Keep an encrypted copy away from home with: bin/homelab offsite setup <address>")
 CAPS.register("gmail", "Gmail", lambda: (os.path.exists(GMAIL_FILE), "No Gmail account yet."), "Add a Gmail app password in the setup wizard to see unread mail.",
               off=lambda: "Gmail is not connected. Add an app password in the setup wizard to see unread mail.")
 
@@ -346,7 +349,7 @@ def _module_rows():
 
 _settings.routes(ROUTER, SETTINGS, _module_rows)
 from core import schedule as _schedule
-_schedule.routes(ROUTER, SETTINGS, lambda: CAPS.ok("host_agent"), lambda: CAPS.ok("ollama"))
+_schedule.routes(ROUTER, SETTINGS, lambda: CAPS.ok("host_agent"), lambda: CAPS.ok("ollama"), lambda: bool(_offsite.read(DATA).get("set_up")))
 SETUP = _setup.Setup(DATA)
 _setup.routes(ROUTER, SETUP, SETTINGS, hardware_view, _module_rows, lambda: TG.enabled, lambda: [c["name"] for c in CAPS.all() if not c["ok"]], lambda: OLLAMA,
                add_app=lambda a: __import__("modules.server", fromlist=["host_action"]).host_action("add", a),
