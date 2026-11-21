@@ -1,4 +1,4 @@
-"""The command line: homelab status | start | stop | restart | logs | doctor | modules | config | backup | restore | update | uninstall.
+"""The command line: homelab status | start | stop | restart | logs | doctor | modules | config | backup | restore | offsite | update | uninstall.
 Everything outside this process (git, docker, the dashboard's address, the keyboard) goes through Ctx, so tests can pretend."""
 import argparse
 import datetime as _datetime  # not `datetime`: the test harness swaps that name to freeze the clock
@@ -6,15 +6,19 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time as _time
 import urllib.request
 
 from core import apps as _apps
 from core import custom as _custom
+from core import offsite as _offsite
+from core import versions as _versions
 
 NAME = "homelab"
 BRANCH = "origin/main"
@@ -103,11 +107,15 @@ class Ctx:
 
     def running(self):
         rc, text = self.run(["docker", "ps", "--format", "{{.Names}}"])
+        self.denied = rc != 0 and "permission denied" in text.lower()  # in the docker group, but this terminal started before that
         return rc == 0 and "telegram-bot" in text.split()
 
     def version(self):
         rc, text = self.git("describe", "--tags", "--always")
         return text if rc == 0 and text else "unknown"
+
+
+DENIED = "  stop  Docker refused your user: this terminal was opened before you joined the docker group. Open a new terminal (or log out and back in), then try again."
 
 
 def services(c):
@@ -122,6 +130,9 @@ def status(c):
     if not c.docker_ready():
         return 1
     rc, text = c.compose("ps", "-a", "--format", "{{.Service}}|{{.State}}")
+    if rc != 0 and "permission denied" in text.lower():
+        c.out(DENIED)
+        return 1
     states = dict(l.split("|", 1) for l in text.splitlines() if "|" in l) if rc == 0 else {}
     for s in services(c):
         c.out(f"  {s}: {states.get(s, 'not created')}")
@@ -140,7 +151,16 @@ def status(c):
 def start(c):
     if not c.docker_ready():
         return 1
-    return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+    return c.compose("up", "-d", "--build", *services(c), stream=True)[0] or wait_up(c)
+
+
+def wait_up(c):
+    """After start or restart, wait for the dashboard to answer, so a status or update run right after does not find it still starting."""
+    if wait_healthy(c, must_be_ok=False):
+        c.out(f"  ok    Dashboard is up: http://localhost:{c.port}")
+        return 0
+    c.out(f"  warn  The apps started, but the dashboard is not answering on port {c.port} after {c.health_wait} seconds. See why with: {NAME} logs")
+    return 1
 
 
 def stop(c):
@@ -152,7 +172,7 @@ def stop(c):
 def restart(c):
     if not c.docker_ready():
         return 1
-    return c.compose("restart", *services(c), stream=True)[0]
+    return c.compose("restart", *services(c), stream=True)[0] or wait_up(c)
 
 
 def logs(c, service=None, follow=False):
@@ -165,7 +185,7 @@ def doctor(c):
     if not c.docker_ready():
         return 1
     if not c.running():
-        c.out(f"  stop  The assistant is not running. Start it with: {NAME} start")
+        c.out(DENIED if getattr(c, "denied", False) else f"  stop  The assistant is not running. Start it with: {NAME} start")
         return 1
     return c.compose("exec", "-T", "telegram-bot", "python", "-m", "core", "doctor", stream=True)[0]
 
@@ -205,8 +225,13 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
         return 0
     if sub == "remove":
         return apps_cmd(c, "remove", rest) if rest else (c.out(f"  stop  Say which: {NAME} apps custom remove <name>") or 2)
+    if sub == "check":
+        return custom_check(c)
+    if sub == "update":
+        return custom_update(c, *rest[:2]) if rest else (c.out(f"  stop  Say which: {NAME} apps custom update <name> [version]") or 2)
     if sub != "add" or len(rest) != 3:
-        c.out(f"  stop  Use: {NAME} apps custom add <name> <image:version> <port>, {NAME} apps custom remove <name>, or {NAME} apps custom list")
+        c.out(f"  stop  Use: {NAME} apps custom add <name> <image:version> <port>, {NAME} apps custom update <name> [version], "
+              f"{NAME} apps custom check, {NAME} apps custom remove <name>, or {NAME} apps custom list")
         return 2
     app, why = _custom.check(c.data, {"title": rest[0], "image": rest[1], "port": rest[2], "inside": inside, "keep": keep, "group": group})
     if why:
@@ -217,6 +242,103 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
         return 2
     _custom.add(c.data, app)
     return apps_cmd(c, "add", [app["id"]])
+
+
+def store_cmd(c, args, port=None, fetch=None, tags_of=None):
+    """homelab apps store [word] lists or searches the CasaOS app store; homelab apps store add <name> adds one as your own app."""
+    from core import casaos
+    if args[:1] == ["add"]:
+        if len(args) != 2:
+            c.out(f"  stop  Say which: {NAME} apps store add <name>. Find names with: {NAME} apps store <word>")
+            return 2
+        uid, gid = (os.getuid(), os.getgid()) if hasattr(os, "getuid") else (1000, 1000)
+        name, spec, notes = casaos.prepare(args[1], uid, gid, port, fetch, tags_of)
+        if not name:
+            c.out(f"  stop  {spec}")
+            return 2
+        app, why = _custom.check(c.data, spec)
+        if why:
+            c.out(f"  stop  {why}" + (f" Choose another with: {NAME} apps store add {name} --port <number>" if "Port" in why else ""))
+            return 2
+        if not _port_free(app["port"]):
+            c.out(f"  stop  Port {app['port']} is already used on this machine. Choose another with: {NAME} apps store add {name} --port <number>")
+            return 2
+        c.out(f"  {app['title']} from the CasaOS store: {app['image']}, opened on port {app['port']}" + (f", keeping {', '.join([app['keep']] + app.get('more', []))}" if app["keep"] else "") + ".")
+        for n in notes:
+            c.out(f"        {n}")
+        if not c.ask("Add it?"):
+            c.out("  Cancelled. Nothing was added. (Add --yes to skip this question.)")
+            return 1
+        _custom.add(c.data, app)
+        return apps_cmd(c, "add", [app["id"]])
+    names = casaos.apps(fetch)
+    if names is None:
+        c.out("  stop  The CasaOS store cannot be reached (no internet?).")
+        return 1
+    hits = casaos.find(args[0], names) if args else names
+    c.out(f"  {len(hits)} of {len(names)} apps in the CasaOS store" + (f" match {args[0]}:" if args else ":"))
+    for i in range(0, len(hits), 4):
+        c.out("    " + "".join(f"{h:<22}" for h in hits[i:i + 4]).rstrip())
+    c.out(f"  Add one with: {NAME} apps store add <name>. Apps that need more power than apps added here get are refused, with the reason.")
+    return 0
+
+
+def custom_check(c, fetch=None):
+    """Asks each registry now whether your apps have a newer version (the assistant does this every Monday by itself)."""
+    mine = _custom.load(c.data)
+    if not mine:
+        c.out(f"  None of your own apps yet. Add one with: {NAME} apps custom add <name> <image:version> <port>")
+        return 0
+    state = _versions.check_all(c.data, mine, **({"fetch": fetch} if fetch else {}), force=True)
+    for a in mine:
+        v = state.get(a["id"]) or {}
+        if v.get("failed"):
+            c.out(f"  warn  {a['title']}: its registry could not be asked (private, or no internet).")
+        elif v.get("newest") or v.get("major"):
+            c.out(f"  new   {_versions.sentence(a['title'], v, a['id'])}")
+        elif v:
+            c.out(f"  ok    {a['title']}: {v['current']} is the newest.")
+        else:
+            c.out(f"  ok    {a['title']}: pinned to a digest, so there is no version to compare.")
+    return 0
+
+
+def custom_update(c, app_id, tag=None):
+    """Moves one of your apps to a newer version (the newest found, or the one you name). Its data folder stays; if it does not start, it goes back."""
+    app = _custom.get(c.data, app_id)
+    if not app:
+        c.out(f"  stop  You have no app called {app_id}. See them with: {NAME} apps custom list")
+        return 2
+    parts = _versions.split(app["image"])
+    if not parts:
+        c.out(f"  stop  {app['title']} is pinned to a digest, so there is no version to move to. Remove it and add it again with the image you want.")
+        return 2
+    known = _versions.available(c.data, [app]).get(app_id) or {}
+    tag = tag or known.get("newest")
+    if not tag and known.get("major"):
+        c.out(f"  ok    {app['title']} is on the newest {parts[2].split('.')[0]}.x. {known['major']} is a bigger jump: read its release notes, then run: {NAME} apps custom update {app_id} {known['major']}")
+        return 0
+    if not tag:
+        c.out(f"  ok    {app['title']} is on the newest version known ({parts[2]}). Ask the registry again with: {NAME} apps custom check")
+        return 0
+    image = f"{app['image'].rpartition(':')[0]}:{tag}"
+    if not _custom.pinned(image) or tag == parts[2]:
+        c.out(f"  stop  {tag} is not a version to move to." if tag != parts[2] else f"  ok    {app['title']} already runs {tag}.")
+        return 2 if tag != parts[2] else 0
+    if not c.docker_ready():
+        return 1
+    old = dict(app)
+    _custom.add(c.data, {**app, "image": image})
+    _custom.write(c.data, {**app, "image": image})
+    c.out(f"  Moving {app['title']} from {parts[2]} to {tag}. Its data folder stays.")
+    if custom_compose(c, app_id, "up", "-d", stream=True)[0] == 0:
+        c.out(f"  ok    {app['title']} now runs {tag}.")
+        return 0
+    _custom.add(c.data, old)
+    _custom.write(c.data, old)
+    custom_compose(c, app_id, "up", "-d", stream=True)
+    c.out(f"  stop  {tag} did not download or start, so {app['title']} is back on {parts[2]}. Check the version exists, and see why with: docker logs {app_id}")
+    return 1
 
 
 def apps_cmd(c, action="list", names=()):
@@ -346,7 +468,8 @@ def lan_ip(c):
 
 
 def access(c, mode):
-    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only). Restarts only the dashboard."""
+    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only).
+    Restarts only the dashboard, the ntfy app when you have it (your phone subscribes to it) and your own apps."""
     if mode == "lan":
         try:
             with open(os.path.join(c.data, "settings.json")) as f:
@@ -375,7 +498,7 @@ def access(c, mode):
             json.dump({"mode": mode, "url": f"http://{ip}:{c.port}" if ip else ""}, f)
     except OSError:
         pass
-    rc = c.compose("up", "-d", "landing", stream=True)[0]
+    rc = c.compose("up", "-d", "landing", *(["ntfy"] if "ntfy" in _apps.chosen(c.data) else []), stream=True)[0]
     for n in _custom.ids(c.data):  # your own apps follow the same setting
         if os.path.exists(_custom.compose_path(c.data, n)):
             custom_compose(c, n, "up", "-d", stream=True)
@@ -637,6 +760,224 @@ def restore(c, path):
     return 0
 
 
+# ---- the off-site copy (restic, in its own container; see core/offsite.py)
+
+def _restic(c, *args, mounts=(), out_dir=None, limit=None):
+    """Runs restic against the repository in .env. Secrets reach it by name through the environment, never on the command line. Returns (rc, text).
+    limit: give up after this many seconds. restic retries a refused login for many minutes, which is right at night and wrong while you wait."""
+    env = read_env(os.path.join(c.stack, ".env"))
+    repo = env.get("HL_RESTIC_REPOSITORY", "")
+    pass_on = {k: env[k] for k in _offsite.PASS_ON if env.get(k)}
+    cache = os.path.join(c.home, "restic-cache")
+    os.makedirs(cache, exist_ok=True)
+    cmd = ["docker", "run", "--rm", "--init", "--hostname", "homelab", "-e", "RESTIC_REPOSITORY", "-e", "RESTIC_PASSWORD", "-e", "RESTIC_CACHE_DIR=/cache",
+           *[x for k in pass_on for x in ("-e", k)], "-v", f"{cache}:/cache"]
+    if hasattr(os, "getuid"):
+        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]  # what it restores belongs to you, not to root
+    if repo.startswith("/"):
+        cmd += ["-v", f"{repo}:{repo}"]
+    for src, dst in mounts:
+        cmd += ["-v", f"{src}:{dst}:ro"]
+    if out_dir:
+        cmd += ["-v", f"{out_dir}:/out"]
+    if limit:
+        cmd += ["--entrypoint", "timeout"]
+        args = (str(limit), "restic", *args)
+    return c.run([*cmd, _offsite.IMAGE, *args], env={"RESTIC_REPOSITORY": repo, "RESTIC_PASSWORD": env.get("HL_RESTIC_PASSWORD", ""), **pass_on})
+
+
+def _last(text):
+    """The reason in restic's output: the last error it was retrying ('... retrying after 54s: Stat: Access Denied' says Access Denied),
+    else its Fatal line, else its last line. Any login in an address is taken out."""
+    lines = []
+    for l in (text or "").splitlines():
+        l = l.strip()
+        if l.startswith("{"):  # --json prints its errors as {"message_type": "exit_error", "message": "Fatal: ..."}
+            try:
+                l = str(json.loads(l).get("message") or l).splitlines()[0]
+            except (ValueError, AttributeError):
+                pass
+        if l:
+            lines.append(l)
+    retry = [l for l in lines if "retrying after" in l]
+    fatal = [l for l in lines if l.startswith("Fatal:")]
+    if retry:
+        why = re.sub(r"^.*retrying after [\d.hms]+: (\w+: )?", "", retry[-1])
+    elif fatal:
+        why = fatal[-1][len("Fatal:"):].strip()
+    else:
+        why = lines[-1] if lines else "no answer"
+    return _offsite.shown(why).rstrip(".")
+
+
+def _set_env(c, values):
+    path = os.path.join(c.stack, ".env")
+    try:
+        lines = [l for l in open(path).read().splitlines() if l.split("=", 1)[0].strip() not in values]
+    except OSError:
+        lines = []
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines + [f"{k}={v}" for k, v in values.items()]) + "\n")
+    os.replace(path + ".tmp", path)
+
+
+def offsite_ready(c):
+    env = read_env(os.path.join(c.stack, ".env"))
+    if not env.get("HL_RESTIC_REPOSITORY") or not env.get("HL_RESTIC_PASSWORD"):
+        c.out(f"  stop  No off-site copy is set up yet. Set one up with: {NAME} offsite setup <address>")
+        c.out("        For example s3:s3.amazonaws.com/your-bucket/homelab, b2:your-bucket:homelab, or a folder like /mnt/drive/homelab.")
+        return False
+    return c.docker_ready()
+
+
+def offsite_setup(c, repo):
+    k = _offsite.kind(repo)
+    if not k:
+        c.out("  stop  That is not an address restic can use from here. Use one of:")
+        for prefix, (name, _) in _offsite.KINDS.items():
+            c.out(f"        {prefix:<7} {name}")
+        c.out("        For example: s3:s3.amazonaws.com/your-bucket/homelab, b2:your-bucket:homelab, rest:https://backup.example.com/homelab, /mnt/drive/homelab")
+        return 2
+    if not c.docker_ready():
+        return 1
+    env = read_env(os.path.join(c.stack, ".env"))
+    missing = [n for n in k[1] if not env.get(n)]
+    if missing:
+        c.out(f"  stop  {k[0]} needs a login. Add these lines to {os.path.join(c.stack, '.env')} first, then run this again:")
+        for n in missing:
+            c.out(f"        {n}=...")
+        return 1
+    if repo.startswith("/"):
+        os.makedirs(repo, exist_ok=True)
+    password = env.get("HL_RESTIC_PASSWORD") or secrets.token_urlsafe(24)
+    _set_env(c, {"HL_RESTIC_REPOSITORY": repo, "HL_RESTIC_PASSWORD": password})
+    rc, text = _restic(c, "cat", "config", limit=60)
+    made = False  # a new copy shows its password, even if it was written on an earlier try that failed
+    if rc == 0:
+        c.out(f"  ok    {_offsite.shown(repo)} already holds an off-site copy that this password opens. Using it.")
+    elif rc != 10 and "does not exist" not in text:  # 10: nothing there yet. Anything else (a wrong login, no answer) would fail init the same way
+        c.out(f"  stop  Could not reach the storage: {_last(text)}")
+        c.out("        Check the address and the login lines in .env. If a copy is already there, it was made with another password: put that one in HL_RESTIC_PASSWORD.")
+        return 1
+    else:
+        rc, text = _restic(c, "init", limit=60)
+        if rc != 0:
+            c.out(f"  stop  Could not start the off-site copy there: {_last(text)}")
+            c.out("        Check the address and the login. If a copy is already there, it was made with another password: put that one in HL_RESTIC_PASSWORD.")
+            return 1
+        made = True
+        c.out(f"  ok    Off-site copy ready at {_offsite.shown(repo)} ({k[0]}).")
+    _offsite.write(c.data, where=_offsite.shown(repo), set_up=int(c.now().timestamp()))
+    if made:
+        c.out("")
+        c.out(f"  Your off-site password: {password}")
+        c.out("  Write it down somewhere safe that is not this machine. Without it the off-site copy can never be read, by you or anyone.")
+        c.out(f"  It is also kept in .env, so every local backup ({NAME} backup) holds it.")
+    c.out("")
+    c.out(f"  Make the first copy now with: {NAME} offsite backup")
+    c.out("  To make one every night, turn on Off-site copy in Settings, Schedule.")
+    return 0
+
+
+def offsite_backup(c):
+    """Your data folder, config.yaml, .env and secrets, encrypted and only what changed, then the oldest copies thinned out (7 daily, 4 weekly, 6 monthly)."""
+    if not offsite_ready(c):
+        return 1
+    parts = [(os.path.join(c.stack, "config.yaml"), "/src/stack/config.yaml"), (os.path.join(c.stack, ".env"), "/src/stack/.env"),
+             (os.path.join(c.stack, "secrets"), "/src/stack/secrets"), (c.data, "/src/data")]
+    parts = [(s, d) for s, d in parts if os.path.exists(s)]
+    start = c.now()
+    rc, text = _restic(c, "backup", "--tag", "homelab", "--exclude", "/src/data/backups", *[d for _, d in parts], mounts=parts)
+    if rc == 0:
+        rc2, text2 = _restic(c, "forget", "--tag", "homelab", "--prune", *_offsite.KEEP)
+        if rc2 != 0:
+            c.out(f"  warn  The copy was made, but the oldest ones were not cleared: {_last(text2)}")
+        _offsite.write(c.data, last_ok=int(start.timestamp()))
+        c.out(f"  ok    Off-site copy made ({_last(text)})")
+        return 0
+    _offsite.write(c.data, last_error={"at": int(start.timestamp()), "msg": _last(text)[:200]})
+    c.out(f"  stop  The off-site copy failed: {_last(text)}")
+    return 1
+
+
+def offsite_list(c):
+    if not offsite_ready(c):
+        return 1
+    rc, text = _restic(c, "snapshots", "--tag", "homelab", "--json", limit=60)
+    try:
+        snaps = json.loads(text) if rc == 0 else None
+    except ValueError:
+        snaps = None
+    if snaps is None:
+        c.out(f"  stop  Could not read the off-site copies: {_last(text)}")
+        return 1
+    if not snaps:
+        c.out(f"  No off-site copies yet. Make one with: {NAME} offsite backup")
+        return 0
+    for s in snaps:
+        m = re.match(r"(.{19})(?:\.\d+)?(Z|[+-]\d\d:\d\d)?", s["time"])  # restic writes nanoseconds, which fromisoformat does not take
+        made = _datetime.datetime.fromisoformat(m[1] + (m[2] or "").replace("Z", "+00:00"))
+        made = made.astimezone().replace(tzinfo=None) if made.tzinfo else made  # in this machine's time zone
+        c.out(f"  {s.get('short_id') or s['id'][:8]}  {when(made)}")
+    c.out(f"  Bring one back with: {NAME} offsite restore <id>  (or leave the id out for the newest)")
+    return 0
+
+
+def offsite_restore(c, snapshot=None):
+    if not offsite_ready(c):
+        return 1
+    snapshot = snapshot or "latest"
+    if not re.match(r"^(latest|[0-9a-f]{8,64})$", snapshot):
+        c.out(f"  stop  {snapshot} is not a copy id. See them with: {NAME} offsite list")
+        return 2
+    c.out(f"  This brings back the off-site copy {snapshot} and replaces: your data folder ({c.data}), config.yaml, .env and the secrets folder.")
+    if not c.ask("Replace what is there now? A safety copy is made first."):
+        c.out("  Cancelled. Nothing was changed. (Add --yes to skip this question.)")
+        return 1
+    work = tempfile.mkdtemp(prefix="offsite-", dir=c.home)
+    try:
+        rc, text = _restic(c, "restore", snapshot, "--tag", "homelab", "--target", "/out", out_dir=work)
+        got = os.path.join(work, "src")
+        if rc != 0 or not os.path.isdir(os.path.join(got, "data")):
+            c.out(f"  stop  Could not bring that copy back: {_last(text) if rc != 0 else 'it holds no data folder'}. Nothing was changed.")
+            return 1
+        was_up = c.which("docker") and c.running()
+        if was_up:
+            c.compose("stop", *services(c))
+        safety = make_backup(c, "before-restore")
+        if not safety:
+            return 1
+        c.out(f"  ok    Safety copy of the current state: {safety}")
+        state = _offsite.read(c.data)
+        try:
+            for arc, dest in (("data", c.data), ("stack/config.yaml", os.path.join(c.stack, "config.yaml")),
+                              ("stack/.env", os.path.join(c.stack, ".env")), ("stack/secrets", os.path.join(c.stack, "secrets"))):
+                _put(os.path.join(got, arc), dest)
+        except OSError as e:
+            c.out(f"  stop  Restoring failed part way ({e}). Your previous state is in {safety}; restore that to undo.")
+            return 1
+        _offsite.write(c.data, **state)  # the copy holds an older note of when copies were made; keep today's
+        c.out("  ok    Restored from the off-site copy.")
+        if was_up:
+            return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+        return 0
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _put(src, dest):
+    """Moves a restored file or folder into place, replacing what was there. Nothing there in the copy leaves dest alone."""
+    if not os.path.lexists(src):
+        return
+    if os.path.isdir(dest) and not os.path.islink(dest):
+        shutil.rmtree(dest)
+    elif os.path.lexists(dest):
+        os.remove(dest)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.move(src, dest)
+
+
 # ---- update
 
 def hot(text):
@@ -878,7 +1219,7 @@ def _uninstall_plan(c, purge):
         keep.append(f"Backups in {c.backups}")
     else:
         keep += [f"Your data in {c.data} (homelab uninstall --purge deletes it)", "Downloaded app images and AI models", "Homebrew packages this program installed (--purge removes them)"]
-    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker"}[k] for k, _ in rec if k in manifest.SHARED]
+    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker", "python-linux": "Python 3"}[k] for k, _ in rec if k in manifest.SHARED]
     if shared:
         keep.append(" and ".join(shared) + ": other programs use it, so it stays")
     keep.append(f"This folder ({c.root}); delete it yourself when you are done")
@@ -998,11 +1339,13 @@ def parser():
     s.add_argument("action", nargs="?", choices=("list", "enable", "disable"), default="list")
     s.add_argument("name", nargs="?")
     s = sub.add_parser("apps", help="list the optional apps, or add or remove them")
-    s.add_argument("action", nargs="?", choices=("list", "add", "remove", "custom"), default="list")
+    s.add_argument("action", nargs="?", choices=("list", "add", "remove", "custom", "store"), default="list")
     s.add_argument("names", nargs="*")
     s.add_argument("--inside", help="custom: the port the app listens on inside its container (default: the same port)")
     s.add_argument("--keep", help="custom: a folder inside the app to keep across restarts and updates, like /config")
     s.add_argument("--tools", action="store_true", help="custom: put its tile under Tools")
+    s.add_argument("--port", help="store add: the port to open it on (default: the one the store gives)")
+    s.add_argument("--yes", action="store_true", help="store add: do not ask first")
     s = sub.add_parser("access", help="who can open the dashboard: lan (home network, needs a PIN) or local")
     s.add_argument("mode", choices=("lan", "local"))
     s = sub.add_parser("config", help="edit config.yaml safely")
@@ -1014,6 +1357,10 @@ def parser():
     s.add_argument("repo", help="the repository address, for example git@github.com:you/homelab-settings.git")
     s = sub.add_parser("restore", help="bring a backup back")
     s.add_argument("file")
+    s.add_argument("--yes", action="store_true")
+    s = sub.add_parser("offsite", help="an encrypted copy of your data in a storage service you choose (setup, backup, list, restore)")
+    s.add_argument("action", choices=("setup", "backup", "list", "restore"))
+    s.add_argument("target", nargs="?", help="setup: the storage address, like s3:s3.amazonaws.com/your-bucket/homelab; restore: a copy id (default: the newest)")
     s.add_argument("--yes", action="store_true")
     s = sub.add_parser("update", help="move to the newest version, with a snapshot and automatic undo")
     s.add_argument("--check", action="store_true", help="only say whether there is something new")
@@ -1052,6 +1399,8 @@ def main(argv=None, ctx=None):
         if a.cmd == "access":
             return access(c, a.mode)
         if a.cmd == "apps":
+            if a.action == "store":
+                return store_cmd(c, a.names, a.port)
             if a.action == "custom":
                 return custom_cmd(c, a.names, a.inside, a.keep, "tools" if a.tools else "apps")
             if a.action != "list" and not a.names:
@@ -1068,6 +1417,12 @@ def main(argv=None, ctx=None):
             return settings_sync(c, a.repo)
         if a.cmd == "restore":
             return restore(c, a.file)
+        if a.cmd == "offsite":
+            if a.action == "setup":
+                if not a.target:
+                    p.error("offsite setup needs the storage address, for example s3:s3.amazonaws.com/your-bucket/homelab")
+                return offsite_setup(c, a.target)
+            return {"backup": offsite_backup, "list": offsite_list}[a.action](c) if a.action != "restore" else offsite_restore(c, a.target)
         if a.cmd == "update":
             return update(c, a.check, a.dry_run, a.channel)
         if a.cmd == "agent":

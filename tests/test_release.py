@@ -50,6 +50,11 @@ class Pins(unittest.TestCase):
         for good in ("e uses", "f uses", "g uses", "h uses", "python:3.12-slim", "scratch"):
             self.assertNotIn(good, text)
 
+    def test_the_apps_that_use_an_ollama_outside_docker_can_find_it_on_linux(self):
+        svc = yaml.safe_load(open(os.path.join(ROOT, "stack", "compose.yaml")))["services"]
+        for name in ("telegram-bot", "open-webui"):  # Docker Desktop names host.docker.internal by itself; Linux Docker Engine does not
+            self.assertIn("host.docker.internal:host-gateway", svc[name].get("extra_hosts", []), name)
+
     def test_watchtower_only_runs_when_asked_for(self):
         svc = yaml.safe_load(open(os.path.join(ROOT, "stack", "compose.yaml")))["services"]
         self.assertEqual(svc["watchtower"]["profiles"], ["auto-update"])

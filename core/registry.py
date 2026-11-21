@@ -7,7 +7,13 @@ import yaml
 PLATFORMS = {"linux", "mac", "wsl"}
 
 
-def this_platform():
+def this_platform(data_dir=None):
+    """linux, mac or wsl. Inside Docker every machine looks like Linux, so the machine the installer saved wins when there is one."""
+    if data_dir:
+        from core import hardware
+        saved = (hardware.load_host(data_dir) or {}).get("os")
+        if saved in ("linux", "mac", "wsl"):
+            return saved
     if sys.platform == "darwin":
         return "mac"
     if sys.platform.startswith("linux"):

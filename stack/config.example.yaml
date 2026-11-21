@@ -29,6 +29,12 @@ models:                       # AI models. The defaults suit a mid-range machine
   journal: "gemma4:26b"       # nightly journal summaries (needs a larger machine)
   # claude_journal / claude_news: optional cloud models, used only if you add an Anthropic key
 
+notify:                       # where reminders, server alerts and update reports go. Chat replies always stay in Telegram.
+  telegram: true              # send them to Telegram (when it is set up)
+  ntfy: ""                    # also to the ntfy phone app: a topic address, e.g. "https://ntfy.sh/pick-a-long-random-name". A private server's token goes in .env as HL_NTFY_TOKEN.
+                              # Leave it empty to use the Phone alerts (ntfy) app, if you add it in Settings, Apps: it gets a private topic by itself
+  apprise: ""                 # also to Discord, Slack, email, Signal and 100+ more through an Apprise API server, e.g. "http://apprise:8000/notify/homelab"
+
 features:                     # switch parts on or off
   therapy_recap: false        # weekly journal recap to bring to a therapy session. READ docs/DISCLAIMER.md before turning this on.
 

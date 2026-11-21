@@ -1,5 +1,5 @@
 """The Schedule page and the Night log's plan: every job that runs on a timer, whether it is on, and when.
-Each one can be turned off. Times are in your time zone. The backup and the git copy are run by the host helper."""
+Each one can be turned off. Times are in your time zone. The backup, the off-site copy and the git copy are run by the host helper."""
 from core import config
 from core.settings import guard_request
 
@@ -11,7 +11,7 @@ def _t12(hm):
     return f"{h % 12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
 
 
-def plan(eff, helper_ok=True, ai_ok=True):
+def plan(eff, helper_ok=True, ai_ok=True, offsite_ok=True):
     """[{id, title, what, on, at, at24, every, needs, fields}] from the effective settings. at is "4:30 AM" style; every says how often."""
     g = lambda path, d=None: _dig(eff, path, d)
     mods = g("modules", {}) or {}
@@ -35,6 +35,8 @@ def plan(eff, helper_ok=True, ai_ok=True):
         dict(id="backup", title="Backup", what="Your data and settings in one file, the oldest removed after the number you keep",
              on=bool(g("night.backup", False)), at=config.clock_time(g("night.backup_at") or "3:30 AM", (3, 30)), switch="night.backup", time="night.backup_at", needs="helper",
              extra={"backup_to": g("night.backup_to") or "", "backup_keep": g("night.backup_keep") or 7}),
+        dict(id="offsite", title="Off-site copy", what="Your data and settings, encrypted, in the storage you set up. Only what changed is sent; 7 daily, 4 weekly and 6 monthly copies are kept",
+             on=bool(g("night.offsite", False)), at=config.clock_time(g("night.offsite_at") or "4:00 AM", (4, 0)), switch="night.offsite", time="night.offsite_at", needs="helper"),
         dict(id="github", title="Copy settings to git", what="Your settings (never the journal, passwords or PIN) to your own private repository, with this machine's SSH key",
              on=bool(g("night.github", False)), at=config.clock_time(g("night.github_at") or "3:45 AM", (3, 45)), switch="night.github", time="night.github_at", needs="helper",
              extra={"github_repo": g("night.github_repo") or ""}),
@@ -43,7 +45,8 @@ def plan(eff, helper_ok=True, ai_ok=True):
         r["at24"] = f"{r['at'][0]:02d}:{r['at'][1]:02d}" if r["at"] else ""
         r["every"] = f"{DAYS[r['day']]}s" + (f" at {_t12(r['at'])}" if r["at"] else "") if r.get("day") is not None else (f"Every day at {_t12(r['at'])}" if r["at"] else "")
         r["at"] = _t12(r["at"]) if r["at"] else ""
-        r["blocked"] = ("The host helper is not running, so this cannot run. Install it with: bin/homelab agent install" if r.get("needs") == "helper" and not helper_ok
+        r["blocked"] = ("No off-site storage is set up yet. Set it up in your terminal with: bin/homelab offsite setup <address>" if r["id"] == "offsite" and not offsite_ok
+                        else "The host helper is not running, so this cannot run. Install it with: bin/homelab agent install" if r.get("needs") == "helper" and not helper_ok
                         else "No AI engine is set up, so this has nothing to write with. Add one in Settings, Apps." if r.get("needs") == "ai" and not ai_ok else "")
     return rows
 
@@ -56,10 +59,10 @@ def _dig(d, path, default=None):
     return d
 
 
-def routes(router, settings, helper_ok, ai_ok):
+def routes(router, settings, helper_ok, ai_ok, offsite_ok=lambda: True):
     @router.get("/schedule")
     def get_schedule(req):
-        return {"jobs": plan(settings.merged(), helper_ok(), ai_ok())}
+        return {"jobs": plan(settings.merged(), helper_ok(), ai_ok(), offsite_ok())}
 
     @router.post("/schedule")
     def set_schedule(req):
