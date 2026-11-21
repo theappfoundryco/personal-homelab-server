@@ -336,6 +336,13 @@ class Everyday(Base):
         self.assertEqual(self.go("status"), 1)
         self.assertIn("not answering on port 3999", self.say())
 
+    def test_a_terminal_from_before_the_docker_group_says_to_open_a_new_one(self):
+        # seen in a real Ubuntu 22.04 install: the install continued in the new group, the terminal it ran in did not have it
+        self.ctx.run = lambda cmd, cwd=None, stream=False, env=None: (1, "permission denied while trying to connect to the docker API") if cmd[0] == "docker" else cli.shell(cmd, cwd, stream, env)
+        for cmd in ("status", "doctor"):
+            self.assertEqual(self.go(cmd), 1, cmd)
+            self.assertIn("this terminal was opened before you joined the docker group. Open a new terminal", self.say(), cmd)
+
     def test_without_docker_every_command_says_how_to_fix_it(self):
         self.fake.docker = False
         for cmd in ("status", "start", "stop", "restart", "doctor", "logs"):

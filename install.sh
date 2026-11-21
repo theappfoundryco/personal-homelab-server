@@ -249,11 +249,14 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 docker compose version >/dev/null 2>&1 || stop "Docker is installed but not its 'compose' part. Update Docker, or install the docker-compose-plugin package."
 if ! docker info >/dev/null 2>&1; then
+  denied=0; case "$(docker info 2>&1 || true)" in *[Pp]ermission\ denied*) denied=1 ;; esac  # not a pipe into grep: with pipefail, docker's own failure would hide the match
   if [ "$OS" = mac ]; then
     start_docker_mac || stop "Docker did not start. Try: colima start   (or orbctl start, or open Docker Desktop), then run install.sh again."
-  elif [ "${HL_REEXEC:-}" != 1 ] && command -v sg >/dev/null 2>&1 && docker info 2>&1 | grep -qi "permission denied"; then
+  elif [ "${HL_REEXEC:-}" != 1 ] && command -v sg >/dev/null 2>&1 && [ "$denied" = 1 ]; then
     say "  Your user was just added to the docker group; continuing with it"
     HL_REEXEC=1 exec sg docker -c "$(printf '%q ' "$0" "$@")"
+  elif [ "$denied" = 1 ]; then  # no sg here (Arch does not ship it), or the re-run still lacks the group
+    stop "Docker is running, but this login started before your user joined the docker group. Log out and back in (or run: newgrp docker), then run install.sh again."
   else stop "Docker is installed but not running or not allowed for your user. Try: sudo systemctl start docker, and sudo usermod -aG docker \$USER (then log out and in)."; fi
 fi
 ok "Docker is running"
@@ -486,6 +489,7 @@ if [ "$BIND" = 0.0.0.0 ]; then
 fi
 say "  ${D}Telegram is not connected yet. The setup wizard in the dashboard walks you through it.${R}"
 say "  ${D}Look after it with${R} $CMD status  ${D}(also: update, backup, modules, logs, help)${R}"
+[ "${HL_REEXEC:-}" = 1 ] && say "  ${Y}Open a new terminal (or log out and back in) before you use $CMD: this one started before you joined the docker group.${R}"
 # Last, so nothing is left to answer in the terminal once the browser takes over
 if [ "$OPEN" = 1 ]; then
   say "  ${D}Opening it in your browser...${R}"

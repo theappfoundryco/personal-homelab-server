@@ -197,6 +197,22 @@ class Installer(unittest.TestCase):
         self.assertIn("sudo systemctl enable --now docker", calls)
         self.assertIn("sudo usermod -aG docker", calls)
 
+    def test_a_new_docker_group_without_sg_says_to_log_in_again(self):
+        self.stub("docker", table={"docker": 'case "$1 $2" in "compose version") exit 0;; "info "*) echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1;; esac; exit 0'})
+        rc, out = self.run_it("--no-open")
+        self.assertEqual(rc, 1)
+        self.assertIn("this login started before your user joined the docker group. Log out and back in (or run: newgrp docker)", out)
+
+    def test_a_new_docker_group_with_sg_continues_in_that_group(self):
+        # pipefail used to hide the "permission denied" match, so this never ran
+        self.stub("docker", table={"docker": 'case "$1 $2" in "compose version") exit 0;; "info "*) [ "$HL_REEXEC" = 1 ] && exit 0; echo "permission denied" >&2; exit 1;; esac; exit 0'})
+        self.stub("sg", table={"sg": 'echo "sg $*" >> "$FAKE_LOG"; exit 0'})
+        rc, out = self.run_it("--no-open")
+        self.assertIn("Your user was just added to the docker group; continuing with it", out)
+        self.assertIn("sg docker -c", self.calls())
+        rc, out = self.run_it("--no-open", HL_REEXEC="1")  # what the re-run inside sg prints at the end
+        self.assertIn("Open a new terminal (or log out and back in) before you use", out)
+
     def test_your_name_and_time_zone_are_written_the_first_time_only(self):
         rc, out = self.run_it("--no-open", HL_NAME='Sa"m \\ Lee')
         self.assertEqual(rc, 0, out)
