@@ -277,6 +277,8 @@ from core.telegram.handlers import EXACT, FILLER, FRESH, URL, WRONG, dispatch, f
 
 # ================================================================ modules
 MODULES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(_config.__file__))), "modules")
+from core import tools as _tools
+TOOLS = _tools.Tools()  # filled once everything it reads exists, below
 _host.provide(**{n: globals()[n] for n in _chat.NEEDS})
 _chat.bind()
 SYSTEM = _chat.SYSTEM
@@ -314,6 +316,9 @@ def hardware_view():
 
 
 doctor = lambda: _doctor.report(CAPS, MODULES, ENABLED, STARTED, MODULE_NOTES, CONFIG, machine=hardware_view())
+_tools.builtin(TOOLS, state, nice_when, TZ, day_events, event_line, weather_lines, location, doctor, strip_tags)
+from core.version import VERSION as _VERSION
+_tools.routes(ROUTER, TOOLS, DATA, _VERSION)
 def _module_rows():
     return [{"name": m.name, "title": m.title, "description": m.description, "default": m.default, "requires": list(m.requires),
              "why_off": MODULE_NOTES.get(m.name, ""), "unavailable": _registry.this_platform() not in m.platforms} for m in MODULES.values() if m.name != "_template"]

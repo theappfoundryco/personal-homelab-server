@@ -33,7 +33,8 @@ def start():
             if path.startswith("/api/bot/"):
                 n = int(self.headers.get("Content-Length") or 0)
                 req = Request(api + "/" + path[len("/api/bot/"):], data=self.rfile.read(n) if n else None, method=self.command,
-                              headers={"Content-Type": "application/json", "X-Settings-Pin": self.headers.get("X-Settings-Pin", "")})  # nginx passes request headers on, so does this
+                              headers={"Content-Type": "application/json", "X-Settings-Pin": self.headers.get("X-Settings-Pin", ""),
+                                       "Authorization": self.headers.get("Authorization", "")})  # nginx passes request headers on, so does this
                 try:
                     with urlopen(req, timeout=30) as r:
                         return self._send(r.status, r.read())

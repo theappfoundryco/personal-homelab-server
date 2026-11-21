@@ -2,14 +2,18 @@
 Things that live in the app or in modules are reached through core.host, bound once by bind() when the app has provided them."""
 import json, re, time
 from datetime import datetime, timedelta
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from core import host
+from core import tools as _tools
 from core.helpers import esc, now, safe, strip_tags
 
 NEEDS = ("CAPS", "MODEL", "OLLAMA", "NAME", "OWNER", "TZ", "ai_keep", "count_tokens", "edit", "send", "tg", "typing", "location", "weather_lines", "flights",
          "nice_when", "has_calendar", "day_events", "event_line", "state", "_lock", "save", "search", "add_reminder", "full_briefing", "live_digest",
-         "server", "my_day", "weather", "sports", "notes_view", "reminders_view")
+         "server", "my_day", "weather", "sports", "notes_view", "reminders_view", "TOOLS")
+# A message that asks for more than one thing: the model may look several things up (core/tools.py) before it answers.
+MULTI = re.compile(r"\?.+\?|\b(and|also|plus)\s+(what|when|whats|what's|how|is|are|do|does|any|my|the)\b", re.I)
 
 
 def bind():
@@ -116,6 +120,22 @@ def cannot(what, needs=("ollama",)):
     return send(f"🤖 I can't {esc(what)} yet. {esc(' '.join(gone))}") if gone else None
 
 
+def with_tools(text):
+    """The local AI with the read-only tools. None when the model does not take tools (Ollama answers 400), so the normal chat answers."""
+    def call(messages, spec):
+        body = {"model": MODEL, "messages": messages, "tools": spec, "stream": False, "think": False, "keep_alive": ai_keep(),
+                "options": {"temperature": 0.3, "num_ctx": 6144, "num_predict": 450}}
+        try:
+            with urlopen(Request(f"{OLLAMA}/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"}), timeout=300) as r:
+                j = json.load(r)
+        except HTTPError:
+            return None
+        count_tokens("Chat", j)
+        return j
+    system = SYSTEM + f"\nNow: {now():%A %d %B %Y, %H:%M}. Use the tools to look things up; answer only from what they return."
+    return _tools.answer_with_tools(call, TOOLS, [{"role": "system", "content": system}, *state["history"][-6:], {"role": "user", "content": text}])
+
+
 def chat(text):
     if cannot("chat"):
         return
@@ -123,6 +143,12 @@ def chat(text):
     tags = {"[[search]]": lambda: search(text), "[[remind]]": lambda: add_reminder(text), "[[brief]]": full_briefing, "[[fresh]]": full_briefing, "[[news]]": live_digest,
             "[[server]]": server, "[[myday]]": my_day, "[[weather]]": weather, "[[sports]]": sports,
             "[[notes]]": notes_view, "[[reminders]]": reminders_view}
+    if MULTI.search(text) and (out := safe(lambda: with_tools(text))):
+        send(md_to_html(out))
+        with _lock:
+            state["history"] = (state["history"] + [{"role": "user", "content": text}, {"role": "assistant", "content": out}])[-12:]
+            save()
+        return
     system = (SYSTEM + f"\nIf he is clearly asking for one of these features, reply with ONLY its tag: {TAGS}.\n\n" + context())
     msgs = [{"role": "system", "content": system}, *state["history"][-8:], {"role": "user", "content": text}]
     intercept = lambda s: tags.get(s.split()[0]) if s.startswith("[[") else None

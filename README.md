@@ -44,6 +44,7 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
 | **Telegram bot** | "Remind me to water the plants tomorrow", "any important emails". It answers from your own data. |
+| **Ask your homelab from Claude** | Optional. `homelab mcp` lets Claude Desktop, Claude Code or any MCP client read your reminders, notes, goals, your day, the weather and the server's health. Off until you turn it on, needs its token, and every tool only reads. The assistant uses the same tools when one message asks for two things. |
 | **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. |
 
 <details>
