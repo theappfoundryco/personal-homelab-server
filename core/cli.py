@@ -1288,7 +1288,7 @@ def uninstall(c, purge=False):
         folder = os.path.basename(c.home.rstrip(os.sep)) or "data"
         word = folder.lstrip(".") or folder  # ".homelab" reads like punctuation next to "to confirm", so ask for "homelab" and take both
         if c.prompt(hot(f"  This cannot be undone. To go ahead, type the word {word} and press Enter: ")).strip() not in (word, folder):
-            c.out("  Cancelled. Nothing was changed.")
+            c.out("  Cancelled. Nothing was changed." + (f" (--yes does not cover deleting your data: type {word} when asked.)" if c.yes else ""))
             return 1
     elif not c.ask("Remove these?"):
         c.out("  Cancelled. Nothing was changed.")

@@ -672,6 +672,7 @@ class Everyday(Base):
         self.fake.answers = ["wrong"]
         self.assertEqual(self.go("uninstall", "--purge", "--yes"), 1)  # --yes does not skip typing the name
         self.assertTrue(os.path.isdir(self.data))
+        self.assertIn(f"--yes does not cover deleting your data: type {os.path.basename(self.home)} when asked", self.say())  # e2e: a script only saw "Cancelled"
         self.fake.answers = [os.path.basename(self.home).lstrip(".")]  # the plain word, without the dot
         self.assertEqual(self.go("uninstall", "--purge"), 0, self.say())
         self.assertFalse(os.path.exists(self.data))
