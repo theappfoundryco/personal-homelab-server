@@ -221,7 +221,7 @@ async function setSchedPage(body, note) {
   const r = await setApi('/schedule');
   if (!r.ok) { body.innerHTML = '<div class="err">The schedule can’t be reached right now.</div>'; return; }
   SET.sched = r.jobs;
-  const row = (j) => `<div class="srow sch"><span><b>${esc(j.title)}</b><small>${esc(j.what)}</small>${j.every ? `<small>${esc(j.every)}</small>` : ''}${j.blocked && j.on ? `<small class="warnline">${esc(j.blocked)}</small>` : ''}
+  const row = (j) => `<div class="srow sch"><span><b>${esc(j.title)}</b><small>${esc(j.what)}</small>${j.every ? `<small>${esc(j.every)}</small>` : ''}${j.blocked && (j.on || j.id === 'offsite') ? `<small class="warnline">${esc(j.blocked)}</small>` : ''}
       ${j.time ? `<label class="sinline"${j.on ? '' : ' hidden'} data-sch-for="${j.id}">Time <input class="ntime" type="time" data-sch-time="${esc(j.time)}" value="${j.at24}"></label>` : ''}
       ${j.id === 'backup' ? `<div data-sch-for="backup"${j.on ? '' : ' hidden'}><label class="sfield"><span>Folder on this machine (empty: the backups folder in ~/.homelab)</span><input data-sch-text="night.backup_to" spellcheck="false" value="${esc(j.extra.backup_to)}" placeholder="~/.homelab/backups"></label>
         <label class="sfield"><span>How many to keep</span><input data-sch-num="night.backup_keep" type="number" min="1" max="60" value="${esc(j.extra.backup_keep)}"></label></div>` : ''}
@@ -233,7 +233,7 @@ async function setSchedPage(body, note) {
     <div class="sgroup">Every day</div><section class="card srows">${ids(['briefing', 'news', 'evening']).map(row).join('')}</section>
     <div class="sgroup">Journal</div><section class="card srows">${ids(['journal', 'insights', 'recap']).map(row).join('')}</section>
     <div class="sgroup">Weekly</div><section class="card srows">${ids(['weekly']).map(row).join('')}</section>
-    <div class="sgroup">Safety copies</div><section class="card srows">${ids(['backup', 'github']).map(row).join('')}</section>
+    <div class="sgroup">Safety copies</div><section class="card srows">${ids(['backup', 'github', 'offsite']).map(row).join('')}</section>
     <button class="sbtn main" id="sch-save">Save</button>${note}`;
 }
 async function schedSave() {

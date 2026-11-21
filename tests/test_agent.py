@@ -150,6 +150,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(due, [("backup", ["backup", "--keep", "3"])])  # GitHub is on but has no repository, so it waits
         self.a.night_record("backup", t.mktime(at(3, 31)), True, "done")
         self.assertEqual(self.a.night_due(at(5, 0)), [])  # once a day
+        json.dump({"night": {"offsite": True}}, open(os.path.join(self.d, "settings.json"), "w"))
+        self.assertEqual(self.a.night_due(at(4, 1)), [("offsite", ["offsite", "backup"])])  # 4:00 AM unless you pick a time
         self.assertEqual(agent.clock("6:05 pm"), (18, 5))
         self.assertIsNone(agent.clock("late"))
 

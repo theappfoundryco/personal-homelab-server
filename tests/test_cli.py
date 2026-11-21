@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 import harness  # noqa: F401  (puts core on the path)
-from core import cli, manifest, migrations
+from core import cli, manifest, migrations, offsite
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.test", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.test",
@@ -194,6 +194,127 @@ class Backups(Base):
         self.assertEqual(self.go("backup"), 1)
         self.assertIn("Could not make the backup", self.say())
         self.assertEqual([f for f in os.listdir(os.path.join(self.home, "backups")) if f.endswith(".part")], [])
+
+
+class Offsite(Base):
+    """The off-site copy. restic is pretend: it answers like the real one and, for restore, writes the files into the folder it was given."""
+    def setUp(self):
+        super().setUp()
+        self.restic, self.envs, self.fail, self.inited = [], [], set(), False
+        real = self.fake.run
+
+        def run(cmd, cwd=None, stream=False, env=None):
+            if cmd[:2] != ["docker", "run"]:
+                return real(cmd, cwd, stream, env)
+            args = cmd[cmd.index(offsite.IMAGE) + 1:]
+            if args[0].isdigit():  # the time limit: timeout 90 restic ...
+                args = args[2:]
+            self.restic.append(cmd)
+            self.envs.append(env or {})
+            if args[0] in self.fail:
+                return 1, "Fatal: unable to open repository: 403 Forbidden"
+            if args[0] == "cat":
+                return (0, "{}") if self.inited else (1, "Fatal: repository does not exist")
+            if args[0] == "init":
+                self.inited = True
+                return 0, "created restic repository 1a2b3c4d"
+            if args[0] == "backup":
+                return 0, "snapshot 5e6f7a8b saved"
+            if args[0] == "snapshots":
+                return 0, json.dumps([{"id": "5e6f7a8b" * 8, "short_id": "5e6f7a8b", "time": "2026-11-03T04:00:12.123+00:00"}])
+            if args[0] == "restore":
+                out = next(v.split(":")[0] for v in cmd if v.endswith(":/out"))
+                os.makedirs(os.path.join(out, "src", "data", "journal"))
+                open(os.path.join(out, "src", "data", "journal", "a.json"), "w").write('{"entry": "from far away"}')
+                return 0, "restoring snapshot 5e6f7a8b"
+            return 0, ""
+        self.ctx.run = run
+
+    def setup_ok(self, repo="s3:s3.amazonaws.com/alex-bucket/homelab"):
+        with open(os.path.join(self.app, "stack", ".env"), "a") as f:
+            f.write("AWS_ACCESS_KEY_ID=AKIAEXAMPLE\nAWS_SECRET_ACCESS_KEY=very-secret-key\n")
+        return self.go("offsite", "setup", repo)
+
+    def test_setup_checks_the_address_and_the_login_first(self):
+        self.assertEqual(self.go("offsite", "setup", "ftp://example.com/x"), 2)
+        self.assertIn("not an address restic can use", self.say())
+        self.assertEqual(self.go("offsite", "setup", "b2:alex-bucket:homelab"), 1)
+        self.assertIn("B2_ACCOUNT_ID=...", self.say())
+        self.assertEqual(self.restic, [])  # nothing was tried
+        self.assertNotIn("HL_RESTIC", open(os.path.join(self.app, "stack", ".env")).read())
+
+    def test_setup_makes_a_password_shows_it_once_and_keeps_it_private(self):
+        self.assertEqual(self.setup_ok(), 0, self.say())
+        env = cli.read_env(os.path.join(self.app, "stack", ".env"))
+        pw = env["HL_RESTIC_PASSWORD"]
+        self.assertGreaterEqual(len(pw), 24)
+        self.assertEqual(env["TG_TOKEN"], "abc")  # the rest of .env is kept
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(self.app, "stack", ".env")).st_mode), 0o600)
+        self.assertIn(pw, self.say())
+        self.assertIn("can never be read", self.say())
+        self.assertEqual(json.load(open(os.path.join(self.data, offsite.STATE)))["where"], "s3:s3.amazonaws.com/alex-bucket/homelab")
+        self.assertEqual(self.setup_ok(), 0)  # again: the copy there is reused and the password is not shown again
+        self.assertIn("already holds an off-site copy", self.say())
+        self.assertNotIn(pw, self.say())
+        self.assertEqual(cli.read_env(os.path.join(self.app, "stack", ".env"))["HL_RESTIC_PASSWORD"], pw)
+
+    def test_secrets_reach_restic_by_name_never_on_the_command_line(self):
+        self.setup_ok()
+        self.go("offsite", "backup")
+        pw = cli.read_env(os.path.join(self.app, "stack", ".env"))["HL_RESTIC_PASSWORD"]
+        for cmd, env in zip(self.restic, self.envs):
+            line = " ".join(cmd)
+            for secret in (pw, "very-secret-key", "AKIAEXAMPLE"):
+                self.assertNotIn(secret, line)
+            self.assertEqual(env["RESTIC_PASSWORD"], pw)
+            self.assertEqual(env["AWS_SECRET_ACCESS_KEY"], "very-secret-key")
+            self.assertNotIn("TG_TOKEN", env)  # only the names restic needs
+            self.assertIn(offsite.IMAGE, cmd)
+
+    def test_backup_sends_data_settings_and_secrets_read_only_and_thins_old_copies(self):
+        self.assertEqual(self.go("offsite", "backup"), 1)  # not set up yet
+        self.assertIn("offsite setup", self.say())
+        self.setup_ok()
+        self.restic.clear()
+        self.assertEqual(self.go("offsite", "backup"), 0, self.say())
+        back, forget = self.restic
+        self.assertIn(f"{self.data}:/src/data:ro", back)
+        self.assertIn(f"{os.path.join(self.app, 'stack', '.env')}:/src/stack/.env:ro", back)
+        self.assertIn("--prune", forget)
+        self.assertIn("--keep-daily", forget)
+        self.assertEqual(offsite.check(self.data, clock=lambda: self.clock.timestamp()), (True, ""))
+
+    def test_a_failed_copy_is_remembered_for_the_doctor(self):
+        self.setup_ok()
+        self.fail.add("backup")
+        self.assertEqual(self.go("offsite", "backup"), 1)
+        self.assertIn("403 Forbidden", self.say())
+        ok, why = offsite.check(self.data)
+        self.assertFalse(ok)
+        self.assertIn("403 Forbidden", why)
+
+    def test_list_and_restore_bring_the_newest_copy_back_after_a_safety_copy(self):
+        self.setup_ok()
+        self.assertEqual(self.go("offsite", "list"), 0)
+        self.assertRegex(self.say(), r"5e6f7a8b  Nov [34], 2026 \d+:\d\d [AP]M")
+        self.assertEqual(self.go("offsite", "restore", "nope;rm"), 2)
+        self.assertEqual(self.go("offsite", "restore"), 1)  # no answer means no
+        self.assertEqual(json.load(open(os.path.join(self.data, "journal", "a.json"))), {"entry": "original"})
+        self.fake.answers = ["y"]
+        self.assertEqual(self.go("offsite", "restore"), 0, self.say())
+        self.assertEqual(json.load(open(os.path.join(self.data, "journal", "a.json"))), {"entry": "from far away"})
+        self.assertTrue(os.path.isfile(os.path.join(self.app, "stack", ".env")))  # not in the copy, so left alone
+        self.assertTrue([f for f in os.listdir(os.path.join(self.home, "backups")) if f.startswith("before-restore-")])
+        self.assertEqual([f for f in os.listdir(self.home) if f.startswith("offsite-")], [])  # the work folder is gone
+        self.assertIn("compose up -d --build landing telegram-bot docker-proxy", self.fake.calls)
+
+    def test_a_folder_on_this_machine_works_too_and_logins_in_an_address_are_never_kept(self):
+        self.assertEqual(offsite.shown("rest:https://alex:pw@backup.example.com/homelab"), "rest:https://backup.example.com/homelab")
+        self.assertIsNone(offsite.kind("/mnt/../etc"))
+        repo = os.path.join(self.tmp, "drive", "homelab")
+        self.assertEqual(self.go("offsite", "setup", repo), 0, self.say())
+        self.assertTrue(os.path.isdir(repo))
+        self.assertIn(f"{repo}:{repo}", self.restic[-1])
 
 
 class Updates(Base):

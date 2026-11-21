@@ -88,6 +88,7 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 - **Tested.** Over 340 automated tests, including recorded API replies, and a scan of every change for secrets, emails and public IP addresses.
 - **Safe updates.** When a new version is out, the dashboard shows what it brings (Security, New and Fixed) and updates with one tap, or run `homelab update`. Either way it takes a snapshot first and goes back by itself if anything fails.
 - **Backups in one command.** `homelab backup` saves your data and settings to one file, `homelab restore` brings it back. Backups are plain files, so keep them somewhere safe.
+- **An encrypted copy away from home.** `homelab offsite setup s3:s3.amazonaws.com/your-bucket/homelab` (or Backblaze B2, Azure, Google Cloud, a restic REST server, or a mounted drive) keeps an encrypted copy with [restic](https://restic.net), every night if you turn it on in Settings, Schedule. Only what changed is sent. Keep the password it shows you: without it the copy can never be read.
 - **Private by default.** The dashboard listens on this machine only until you open it to your network with a PIN. The only outside calls are for features you use, such as weather and news feeds.
 - **Open.** MIT licence, built in the open, and written so that one missing piece never takes the rest down.
 
@@ -133,6 +134,7 @@ If `homelab` is not found, run `~/personal-homelab-server/bin/homelab path add` 
 | `homelab modules` | list modules, or turn one on or off |
 | `homelab apps` | list the optional apps, or add or remove them |
 | `homelab backup`, `homelab restore` | save your data and settings to one file, bring it back |
+| `homelab offsite setup <address>`, `offsite backup`, `offsite list`, `offsite restore [id]` | an encrypted copy in storage you choose, made, listed and brought back |
 | `homelab access` | who can open the dashboard: this machine only, or your home network with a PIN |
 | `homelab logs`, `start`, `stop`, `restart` | the usual |
 

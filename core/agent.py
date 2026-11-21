@@ -173,7 +173,7 @@ class Agent:
                 if os.path.isfile(p) and self.now() - os.path.getmtime(p) > KEEP_RESULTS:
                     os.remove(p)
 
-    # ---- the night jobs you turned on in Settings, Night jobs (night in settings.json): a backup, and a copy of your settings to git
+    # ---- the night jobs you turned on in Settings, Night jobs (night in settings.json): a backup, an off-site copy, and a copy of your settings to git
     def night_due(self, now=None):
         """[(job, command args)] that should start now: on, past their time today, and not run yet today."""
         try:
@@ -186,6 +186,7 @@ class Agent:
         due = []
         for job, on, at, args in (("backup", night.get("backup"), night.get("backup_at") or "3:30 AM",
                                    ["backup", "--keep", str(night.get("backup_keep") or 7)] + (["--to", night["backup_to"]] if night.get("backup_to") else [])),
+                                  ("offsite", night.get("offsite"), night.get("offsite_at") or "4:00 AM", ["offsite", "backup"]),
                                   ("github", night.get("github") and night.get("github_repo"), night.get("github_at") or "3:45 AM",
                                    ["settings-sync", str(night.get("github_repo") or "")])):
             hm = clock(at)
