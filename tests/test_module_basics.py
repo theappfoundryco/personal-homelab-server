@@ -17,7 +17,8 @@ class Basics(unittest.TestCase):
 
     def capture(self, mod):
         sent = []
-        self.patch(mod, send=lambda text, buttons=None, **kw: sent.append(text))
+        grab = lambda text, buttons=None, *a, **kw: sent.append(text)
+        self.patch(mod, **{n: grab for n in ("send", "notify") if hasattr(mod, n)})  # replies go through send, pushes through notify
         return sent
 
     def test_world_clock(self):
@@ -396,6 +397,15 @@ class Basics(unittest.TestCase):
         m.incident("Test app stopped for a while")
         self.assertEqual([i["text"] for i in self.bot.state["incidents"]], ["Test app stopped for a while"])
         self.assertEqual(sent, [])  # recorded for the recap, never pushed
+
+    def test_a_due_reminder_is_pushed_through_notify(self):
+        import modules.planner as m
+        pushed = []
+        self.patch(m, notify=lambda text, buttons=None, silent=False: pushed.append(text), save=lambda: None,
+                   past_add=lambda *a, **kw: None, nudged=lambda *a, **kw: None)
+        self.patch(m, state={"reminders": [{"id": "r1", "text": "Call Sam", "due": 0, "repeat": None}]})
+        m.fire_reminders()
+        self.assertEqual(pushed, ["⏰ <b>Reminder</b>\nCall Sam"])  # so it reaches ntfy or Apprise too, not only Telegram
 
     def test_briefing_state_is_shared_not_copied(self):
         import modules.briefing as m

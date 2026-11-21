@@ -44,6 +44,7 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
 | **Telegram bot** | "Remind me to water the plants tomorrow", "any important emails". It answers from your own data. |
+| **Alerts anywhere** | Reminders, server alerts and update reports reach you in Telegram, the ntfy phone app, or 100+ other services through Apprise. Add `notify:` to `config.yaml`; chat stays in Telegram. |
 | **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. |
 
 <details>
