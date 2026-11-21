@@ -299,7 +299,7 @@ _host.provide(llm_json=llm_json, nudged=nudged, edit=edit, U=U, nice_when=nice_w
               weather_lines=weather_lines, GMAIL_FILE=GMAIL_FILE, GMAIL_USER=GMAIL_USER, ALWAYS_ON=ALWAYS_ON, APPS=APPS, DAILY=DAILY, DOCKER=DOCKER, PROM=PROM, _ai=_ai, ai_status=ai_status, app_name=app_name, EMBED_MODEL=EMBED_MODEL, JOURNAL_MODEL=JOURNAL_MODEL, MODEL=MODEL, NEWS_MODEL=NEWS_MODEL, _run=_run, run_write=run_write, journal_work=journal_work, tg=tg, write_json=write_json)
 APP = _app.App(CONFIG, ROUTER, _scheduler.Scheduler(str(TZ)), CAPS, _store.Store(DATA), _llm.Ollama(OLLAMA), TG)
 MODULES = _registry.discover(MODULES_DIR)
-ENABLED, MODULE_NOTES = _registry.plan(MODULES, cfg("modules", None))
+ENABLED, MODULE_NOTES = _registry.plan(MODULES, cfg("modules", None), platform=_registry.this_platform(DATA))
 STARTED = [_n for _n in ENABLED if _registry.start(MODULES[_n], APP)]
 from core import doctor as _doctor
 from core import hardware as _hardware
@@ -313,10 +313,10 @@ def hardware_view():
     return dict(_hw)
 
 
-doctor = lambda: _doctor.report(CAPS, MODULES, ENABLED, STARTED, MODULE_NOTES, CONFIG, machine=hardware_view())
+doctor = lambda: _doctor.report(CAPS, MODULES, ENABLED, STARTED, MODULE_NOTES, CONFIG, platform=_registry.this_platform(DATA), machine=hardware_view())
 def _module_rows():
     return [{"name": m.name, "title": m.title, "description": m.description, "default": m.default, "requires": list(m.requires),
-             "why_off": MODULE_NOTES.get(m.name, ""), "unavailable": _registry.this_platform() not in m.platforms} for m in MODULES.values() if m.name != "_template"]
+             "why_off": MODULE_NOTES.get(m.name, ""), "unavailable": _registry.this_platform(DATA) not in m.platforms} for m in MODULES.values() if m.name != "_template"]
 
 
 _settings.routes(ROUTER, SETTINGS, _module_rows)
