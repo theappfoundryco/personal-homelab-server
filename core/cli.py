@@ -244,6 +244,27 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
     return apps_cmd(c, "add", [app["id"]])
 
 
+def mcp_cmd(c, action="on"):
+    """MCP (core/tools.py): turns it on by making a token, and prints how to connect. off deletes the token, so every client is shut out."""
+    from core import tools as _tools
+    path = os.path.join(c.data, _tools.TOKEN_FILE)
+    if action == "off":
+        if os.path.exists(path):
+            os.remove(path)
+        c.out("  ok    MCP is off. Every client that had the token is shut out. Turn it on again with: " + f"{NAME} mcp")
+        return 0
+    os.makedirs(c.data, exist_ok=True)
+    token = _tools.token(c.data, make=True)
+    url = f"http://localhost:{c.port}/api/bot/mcp"
+    c.out(f"  ok    MCP is on at {url}")
+    c.out("        Every tool only reads: reminders, notes, goals, your day, the weather and the server's health.")
+    c.out("        To add it to Claude Code:")
+    c.out(f'          claude mcp add --transport http homelab {url} --header "Authorization: Bearer {token}"')
+    c.out("        Other clients: the address above, with the header  Authorization: Bearer <the token>.")
+    c.out(f"        Keep the token private. Shut every client out with: {NAME} mcp off")
+    return 0
+
+
 def store_cmd(c, args, port=None, fetch=None, tags_of=None):
     """homelab apps store [word] lists or searches the CasaOS app store; homelab apps store add <name> adds one as your own app."""
     from core import casaos
@@ -1358,6 +1379,8 @@ def parser():
     s = sub.add_parser("restore", help="bring a backup back")
     s.add_argument("file")
     s.add_argument("--yes", action="store_true")
+    s = sub.add_parser("mcp", help="let Claude Desktop, Claude Code or another MCP client read your reminders, notes, day and server health")
+    s.add_argument("action", nargs="?", choices=("on", "off"), default="on")
     s = sub.add_parser("offsite", help="an encrypted copy of your data in a storage service you choose (setup, backup, list, restore)")
     s.add_argument("action", choices=("setup", "backup", "list", "restore"))
     s.add_argument("target", nargs="?", help="setup: the storage address, like s3:s3.amazonaws.com/your-bucket/homelab; restore: a copy id (default: the newest)")
@@ -1417,6 +1440,8 @@ def main(argv=None, ctx=None):
             return settings_sync(c, a.repo)
         if a.cmd == "restore":
             return restore(c, a.file)
+        if a.cmd == "mcp":
+            return mcp_cmd(c, a.action)
         if a.cmd == "offsite":
             if a.action == "setup":
                 if not a.target:

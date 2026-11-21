@@ -46,6 +46,7 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **Telegram bot** | "Remind me to water the plants tomorrow", "any important emails". It answers from your own data. |
 | **Alerts anywhere** | Reminders, server alerts and update reports reach you in Telegram, the ntfy phone app, or 100+ other services through Apprise. Add `notify:` to `config.yaml`; chat stays in Telegram. |
 | **Home Assistant** | Optional. "Turn off the kitchen lights", "is the front door locked", "what's the temperature in the bedroom", and a line about your home in the morning brief. Every change asks Yes or No first; unlocking needs your permission in config. |
+| **Ask your homelab from Claude** | Optional. `homelab mcp` lets Claude Desktop, Claude Code or any MCP client read your reminders, notes, goals, your day, the weather and the server's health. Off until you turn it on, needs its token, and every tool only reads. The assistant uses the same tools when one message asks for two things. |
 | **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. Any container on the machine can add its own tile with a `homelab.tile.url` label (Homepage's `homepage.href` labels work too). |
 
 <details>
