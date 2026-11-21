@@ -457,6 +457,13 @@ class Everyday(Base):
         self.assertEqual(self.go("status"), 1)
         self.assertIn("not answering on port 3999", self.say())
 
+    def test_a_terminal_from_before_the_docker_group_says_to_open_a_new_one(self):
+        # seen in a real Ubuntu 22.04 install: the install continued in the new group, the terminal it ran in did not have it
+        self.ctx.run = lambda cmd, cwd=None, stream=False, env=None: (1, "permission denied while trying to connect to the docker API") if cmd[0] == "docker" else cli.shell(cmd, cwd, stream, env)
+        for cmd in ("status", "doctor"):
+            self.assertEqual(self.go(cmd), 1, cmd)
+            self.assertIn("this terminal was opened before you joined the docker group. Open a new terminal", self.say(), cmd)
+
     def test_without_docker_every_command_says_how_to_fix_it(self):
         self.fake.docker = False
         for cmd in ("status", "start", "stop", "restart", "doctor", "logs"):
@@ -469,6 +476,25 @@ class Everyday(Base):
         self.go("logs", "-f")
         self.assertEqual(self.fake.calls, ["compose up -d --build landing telegram-bot docker-proxy", "compose stop landing telegram-bot docker-proxy",
                                            "compose restart landing telegram-bot docker-proxy", "compose logs --tail 100 -f telegram-bot"])
+
+    def test_start_and_restart_wait_for_the_dashboard_so_status_right_after_works(self):
+        # Install test on Linux: restart returned while the bot was still starting, and the status run right after failed.
+        for cmd in ("start", "restart"):
+            self.fake.probes = [None, None, {"ok": False, "modules": []}]
+            self.assertEqual(self.go(cmd), 0, cmd)
+            self.assertIn("Dashboard is up: http://localhost:3999", self.say())
+            self.assertEqual(self.fake.probes, [{"ok": False, "modules": []}], cmd)  # it asked until the dashboard answered
+
+    def test_start_and_restart_say_how_to_look_when_the_dashboard_never_answers(self):
+        for cmd in ("start", "restart"):
+            self.fake.probes = [None]
+            self.assertEqual(self.go(cmd), 1, cmd)
+            self.assertIn("not answering on port 3999 after 9 seconds. See why with: homelab logs", self.say())
+
+    def test_start_does_not_wait_when_compose_failed(self):
+        self.fake.up_rc, self.fake.probes = 1, [None]
+        self.assertEqual(self.go("start"), 1)
+        self.assertNotIn("not answering", self.say())
 
     def test_apps_add_starts_only_the_new_ones_with_what_they_need_and_start_includes_them(self):
         self.assertEqual(self.go("apps"), 0)
@@ -529,6 +555,10 @@ class Everyday(Base):
         self.assertEqual(json.load(open(os.path.join(self.data, "access.json")))["url"], "http://192.168.1.20:3999")
         self.assertEqual(self.go("access", "local"), 0)
         self.assertEqual(open(os.path.join(self.app, "stack", ".env")).read().count("HL_BIND="), 1)
+        cli._apps.save(self.data, ["ntfy"])
+        self.fake.calls.clear()
+        self.assertEqual(self.go("access", "lan"), 0)
+        self.assertIn("compose up -d landing ntfy", self.fake.calls)  # your phone subscribes to ntfy, so it follows the dashboard
 
     def test_nightly_backup_keeps_only_the_newest(self):
         dest = os.path.join(self.tmp, "nightly")

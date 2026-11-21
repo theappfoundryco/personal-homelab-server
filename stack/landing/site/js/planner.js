@@ -38,7 +38,7 @@ function buildComposer() {
   const keep = $('#add-text')?.value || '';
   if (!$('#composer')) {
     $('#notes-body').innerHTML = `<div class="card composer" id="composer"></div><div id="notes-lists"><div class="skel"></div></div>
-      <p class="hint">Just say it: the AI on your server decides if it’s a note, a reminder or a goal, and learns when you change it. Tap the circle when a note is done and the target when a goal is achieved. Reminders reach you on Telegram and as a phone alert.</p>`;
+      <p class="hint">Just say it: the AI on your server decides if it’s a note, a reminder or a goal, and learns when you change it. Tap the circle when a note is done and the target when a goal is achieved. Reminders reach you on Telegram, and in the ntfy app when Phone alerts is added (Settings, Apps).</p>`;
     $('#notes-lists').onclick = listTap;
   }
   const c = $('#composer');

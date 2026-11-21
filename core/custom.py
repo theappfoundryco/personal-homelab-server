@@ -18,7 +18,7 @@ KEEP = re.compile(r"^/[A-Za-z0-9_./-]{0,120}$")
 GROUPS = ("apps", "tools")
 LABEL = "homelab.custom"
 # ports the built-in apps publish (installed or not), so a later Add of a built-in never clashes; tests check this against compose.yaml
-BUILTIN_PORTS = (53, 3000, 3001, 3002, 3080, 3095, 5678, 8081, 8888, 8889, 9090, 9100, 11434)
+BUILTIN_PORTS = (53, 3000, 3001, 3002, 3080, 3095, 5678, 8081, 8090, 8888, 8889, 9090, 9100, 11434)
 RESERVED = set(_apps.CORE) | set(_apps.CATALOG) | {s for v in _apps.CATALOG.values() for s in v[2]} | {"watchtower", "homelab", "custom"}
 
 

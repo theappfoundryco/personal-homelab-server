@@ -40,6 +40,35 @@ def containers():
     return {c["Names"][0].lstrip("/"): c["State"] for c in http(f"{DOCKER}/containers/json?all=1", timeout=10)}
 
 
+# Tiles from Docker labels: a container on this machine with homelab.tile.url (or Homepage's homepage.href) gets a tile on its own.
+# homelab.tile.title / .sub / .icon / .group, or homepage.name / .description / .icon, fill in the rest.
+ICON_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
+
+
+def labelled_tiles(listing):
+    """Tiles for running containers that ask for one with labels. listing: Docker's /containers/json. Never raises on odd labels."""
+    out, seen = [], set()
+    for c in listing or []:
+        lab = c.get("Labels") or {}
+        if not isinstance(lab, dict) or c.get("State", "running") != "running" or _custom.LABEL in lab:  # your own apps already have a tile
+            continue
+        url = str(lab.get("homelab.tile.url") or lab.get("homepage.href") or "").strip()
+        if not re.match(r"^https?://[^\s\"'<>]+$", url) or len(url) > 300:
+            continue
+        name = (c.get("Names") or ["/app"])[0].lstrip("/")
+        title = str(lab.get("homelab.tile.title") or lab.get("homepage.name") or name).strip()[:30]
+        if title.lower() in seen:
+            continue
+        seen.add(title.lower())
+        icon = re.sub(r"\.(png|svg|webp)$", "", str(lab.get("homelab.tile.icon") or lab.get("homepage.icon") or "").strip().lower())
+        if icon.startswith(("mdi-", "si-", "sh-")):  # Homepage's own icon sets: not in the icon set the dashboard uses, so the first letter shows instead
+            icon = ""
+        out.append({"name": title, "sub": str(lab.get("homelab.tile.sub") or lab.get("homepage.description") or "From Docker").strip()[:40],
+                    "url": url, "icon": icon if ICON_NAME.match(icon) else "", "c": name,
+                    "group": "tools" if str(lab.get("homelab.tile.group", "")).strip().lower() == "tools" else "apps"})
+    return sorted(out, key=lambda t: t["name"].lower())
+
+
 TEMP = 'max(node_hwmon_temp_celsius{chip=~".*coretemp.*"})'
 
 
@@ -159,8 +188,24 @@ def apps_log_tail():
         return ""
 
 
-def catalog():
-    """Every optional app with whether you chose it, its state and the memory it uses now, plus the core apps."""
+def ntfy_note(a, private=True):
+    """The ntfy app: which topic to subscribe to on the phone (the dashboard adds this machine's address), and the tile opens it.
+    The topic is what lets someone read your alerts, so it is left out unless private (no PIN is set, or the right one came)."""
+    from core import notify as _notify
+    if NOTIFY.source() == "config":
+        a["note"] = "Alerts go to the ntfy address set in config.yaml (notify.ntfy), not to this app."
+        return
+    if not private:
+        a["note"] = "Enter your PIN in Settings to see the topic your phone subscribes to."
+        return
+    topic = _notify.local_topic(DATA)
+    a["subscribe"] = {"port": _notify.LOCAL_PORT, "topic": topic}
+    a["open_path"] = "/" + topic
+
+
+def catalog(private=True):
+    """Every optional app with whether you chose it, its state and the memory it uses now, plus the core apps.
+    private: the request may see secrets such as the ntfy topic (no PIN is set, or the right one came with it)."""
     ids = _apps.chosen(DATA)
     try:
         cs = containers()
@@ -179,6 +224,8 @@ def catalog():
             st = [cs.get(x, "missing") for x in a["services"]]
             a["state"] = "running" if all(x == "running" for x in st) else "missing" if all(x == "missing" for x in st) else "stopped"
         a["memory_now_mb"] = sum(mem.get(x, 0) for x in a["services"]) or None
+        if a["id"] == "ntfy" and a["chosen"]:
+            ntfy_note(a, private)
         out.append(a)
     for a in _custom.view(DATA):
         a["state"] = None if cs is None else cs.get(a["id"], "missing")
@@ -187,7 +234,8 @@ def catalog():
     core = [{"id": n, "title": "Telegram assistant" if n == "telegram-bot" else app_name(n).split(" (")[0], "state": None if cs is None else cs.get(n, "missing"),
              "memory_now_mb": mem.get(n)} for n in _apps.CORE]
     reboot = safe(lambda: bool(json.load(open(f"{DATA}/agent.json")).get("reboot")), False)
-    return {"apps": out, "core": core, "docker": cs is not None, "helper": not CAPS.missing(["host_agent"]), "reboot": reboot, "working": apps_log_tail()}
+    tiles = safe(lambda: labelled_tiles(http(f"{DOCKER}/containers/json", timeout=5)), []) if cs is not None else []
+    return {"apps": out, "core": core, "labelled": tiles, "docker": cs is not None, "helper": not CAPS.missing(["host_agent"]), "reboot": reboot, "working": apps_log_tail()}
 
 
 def restart_app(name, msg=None):
@@ -239,7 +287,7 @@ def find_app(text):
             return n
     alias = {"ai chat": "open-webui", "webui": "open-webui", "kuma": "uptime-kuma", "uptime": "uptime-kuma", "ai": "ollama",
              "automation": "n8n", "chart": "grafana", "search": "searxng", "adblock": "adguard", "logs viewer": "dozzle",
-             "home page": "landing", "dashboard": "homepage", "voice": "whisper"}
+             "home page": "landing", "dashboard": "homepage", "voice": "whisper", "phone alerts": "ntfy"}
     return next((v for k, v in alias.items() if k in t), None)
 
 REPO = "theappfoundryco/personal-homelab-server"
@@ -362,7 +410,7 @@ def update_state(fresh=False):
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
+    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "NOTIFY", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
 
     router = app.router
 
@@ -379,7 +427,9 @@ def register(app):
 
     @router.get("/server/catalog")
     def server_catalog(req):
-        return catalog()
+        from core.settings import guard_request
+        sent = req.headers.get("X-Settings-Pin")  # only a PIN that was sent is checked: the home page asks without one, and that must not count as a wrong try
+        return catalog(private=not SETTINGS.pin or bool(sent) and guard_request(SETTINGS, req) is None)
 
     @router.post("/server/apps/change")
     def server_apps_change(req):
