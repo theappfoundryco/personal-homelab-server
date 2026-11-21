@@ -51,7 +51,8 @@ class Tools:
             if want is int and isinstance(v, str) and v.strip().lstrip("-").isdigit():
                 v = int(v)
             if not isinstance(v, want) or (want is int and isinstance(v, bool)):
-                return f"{k} should be a {t['params'][k][0]}.", False
+                kind = t["params"][k][0]
+                return f"{k} should be {'an' if kind[0] in 'aeiou' else 'a'} {kind}.", False
             clean[k] = v
         missing = [k for k in t["required"] if k not in clean]
         if missing:

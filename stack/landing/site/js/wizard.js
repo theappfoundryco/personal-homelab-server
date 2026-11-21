@@ -124,7 +124,8 @@ const WZ_OLLAMA_OS = {
     { text: 'Find its address: look for IPv4 Address.', cmd: 'ipconfig' }],
 };
 function wzRemoteSteps() {
-  const os = WZ.ollOs || 'mac', tabs = [['mac', 'Mac'], ['linux', 'Linux'], ['windows', 'Windows']];
+  // first guess: the system of the device you are on, since the machine with Ollama is often the laptop you are holding
+  const os = WZ.ollOs || (/Windows/.test(navigator.userAgent) ? 'windows' : /Mac/.test(navigator.userAgent) ? 'mac' : 'linux'), tabs = [['mac', 'Mac'], ['linux', 'Linux'], ['windows', 'Windows']];
   const steps = [...WZ_OLLAMA_OS[os], { text: 'Type it in the Address field above as http://ADDRESS:11434 (a Tailscale address works too), then press Connect.' }];
   return `<div class="label">On the machine that runs Ollama</div><div class="seg ostabs" role="tablist">${tabs.map(([k, n]) => `<button type="button" role="tab" aria-selected="${k === os}" class="${k === os ? 'on' : ''}" data-oll-os="${k}">${n}</button>`).join('')}</div>`
     + stepsHTML(steps)

@@ -82,6 +82,14 @@ class Basics(unittest.TestCase):
         finally:
             b.state.pop("here")
 
+    def test_a_home_you_picked_beats_the_internet_guess(self):
+        import modules.location as m
+        guess = {"city": "Elsewhere", "country": "", "lat": 0, "lon": 0, "tz": "UTC", "source": "internet"}
+        self.patch(m, ip_location=lambda: guess, day_events=lambda d: [], HOME_SET=True, HOME={**m.HOME, "city": "Leeds"})
+        self.assertEqual((m.location()["city"], m.location()["source"]), ("Leeds", "home"))  # picked in setup: a VPN or rented server can not move it
+        self.patch(m, HOME_SET=False)
+        self.assertEqual(m.location()["city"], "Elsewhere")  # still the example's home: the internet knows better
+
     RSS = ("<rss><channel><item><title>Big &amp; news</title><link>http://x/1</link><pubDate>Tue, 03 Nov 2026 09:00:00 GMT</pubDate>"
            "<description>&lt;p&gt;Something happened today.&lt;/p&gt;</description></item></channel></rss>")
 

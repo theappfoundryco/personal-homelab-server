@@ -49,7 +49,7 @@ async function loadBrief() {
   body.innerHTML = '<div class="skel" style="height:60px"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>';
   try {
     const b = await getJSON('/api/bot/brief');
-    body.innerHTML = `<h1 class="brief-title">${esc(b.title)}</h1><p class="page-sub" style="margin-bottom:16px">${esc(b.city)} • ${new Date(b.at * 1000).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\b(am|pm)\b/g, (x) => x.toUpperCase())}</p>`
+    body.innerHTML = `<h1 class="brief-title">${esc(b.title)}</h1><p class="page-sub" style="margin-bottom:16px">${esc(b.city)} • ${new Date(b.at * 1000).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: CFG.timezone }).replace(/\b(am|pm)\b/g, (x) => x.toUpperCase())}</p>`
       + b.sections.map(secHTML).join('');
   } catch { body.innerHTML = '<div class="err">Couldn’t make your briefing. Try again in a minute.</div>'; }
 }

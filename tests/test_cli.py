@@ -153,6 +153,14 @@ class Backups(Base):
         self.assertIn("compose stop landing telegram-bot docker-proxy", self.fake.calls)
         self.assertIn("compose up -d --build landing telegram-bot docker-proxy", self.fake.calls)
 
+    def test_restore_waits_for_the_dashboard_before_it_returns(self):
+        # e2e: the dashboard did not answer right after "Restored.", so the next page load or command failed
+        self.go("backup")
+        path = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])
+        self.fake.answers, self.fake.probes = ["y"], [{"ok": True, "modules": []}, None, None, {"ok": True, "modules": []}]
+        self.assertEqual(self.go("restore", path), 0, self.say())
+        self.assertIn("Dashboard is up: http://localhost:3999", self.say())
+
     def test_restore_asks_first_and_cancel_changes_nothing(self):
         self.go("backup")
         path = os.path.join(self.home, "backups", os.listdir(os.path.join(self.home, "backups"))[0])

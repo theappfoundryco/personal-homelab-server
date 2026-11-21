@@ -1,11 +1,12 @@
 // ---------- Greeting ----------
 function tick() {
-  const d = new Date(), h = d.getHours();
+  // home time, like Your day and the world clock below: a phone set to another zone would show a date that disagrees with them
+  const d = new Date(), timeZone = CFG.timezone, h = Math.floor((zoneMinutes(timeZone, d) % 1440) / 60);
   const g = h >= 5 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : 'Good evening';
   $('#greet').textContent = CFG.name ? `${g}, ${CFG.name}` : g;
   $('#clocks-sub').textContent = CFG.clocks.length ? `Times compared with ${CFG.home_city || 'home'}` : '';
-  $('#when').textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) + ' • '
-    + d.toLocaleTimeString('en-US', T12)
+  $('#when').textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone }) + ' • '
+    + d.toLocaleTimeString('en-US', { ...T12, timeZone })
     + (X.location?.city ? ' • ' + X.location.city.replace(/ /g, ' ') : '');
   clocks();
 }

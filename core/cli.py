@@ -155,7 +155,7 @@ def start(c):
 
 
 def wait_up(c):
-    """After start or restart, wait for the dashboard to answer, so a status or update run right after does not find it still starting."""
+    """After start, restart or restore, wait for the dashboard to answer, so a status or update run right after does not find it still starting."""
     if wait_healthy(c, must_be_ok=False):
         c.out(f"  ok    Dashboard is up: http://localhost:{c.port}")
         return 0
@@ -262,6 +262,8 @@ def mcp_cmd(c, action="on"):
     c.out(f'          claude mcp add --transport http homelab {url} --header "Authorization: Bearer {token}"')
     c.out("        Other clients: the address above, with the header  Authorization: Bearer <the token>.")
     c.out(f"        Keep the token private. Shut every client out with: {NAME} mcp off")
+    if not c.running():
+        c.out(f"  warn  The assistant is not running, so MCP answers once you start it: {NAME} start")
     return 0
 
 
@@ -777,7 +779,7 @@ def restore(c, path):
         return 1
     c.out("  ok    Restored.")
     if was_up:
-        return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+        return c.compose("up", "-d", "--build", *services(c), stream=True)[0] or wait_up(c)
     return 0
 
 
@@ -1460,7 +1462,8 @@ def main(argv=None, ctx=None):
             return uninstall(c, a.purge)
         return {"status": status, "start": start, "stop": stop, "restart": restart, "doctor": doctor}[a.cmd](c)
     except ImportError as e:
-        c.out(f"  stop  A needed Python package is missing ({e}). Install it with: pip3 install pyyaml")
+        from core.hardware import system as _system
+        c.out(f"  stop  A needed Python package is missing ({e}). Install it with: {_system.pyyaml_fix()}")
         return 1
     except KeyboardInterrupt:
         c.out("\n  Stopped.")
