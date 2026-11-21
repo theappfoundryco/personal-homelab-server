@@ -159,8 +159,24 @@ def apps_log_tail():
         return ""
 
 
-def catalog():
-    """Every optional app with whether you chose it, its state and the memory it uses now, plus the core apps."""
+def ntfy_note(a, private=True):
+    """The ntfy app: which topic to subscribe to on the phone (the dashboard adds this machine's address), and the tile opens it.
+    The topic is what lets someone read your alerts, so it is left out unless private (no PIN is set, or the right one came)."""
+    from core import notify as _notify
+    if NOTIFY.source() == "config":
+        a["note"] = "Alerts go to the ntfy address set in config.yaml (notify.ntfy), not to this app."
+        return
+    if not private:
+        a["note"] = "Enter your PIN in Settings to see the topic your phone subscribes to."
+        return
+    topic = _notify.local_topic(DATA)
+    a["subscribe"] = {"port": _notify.LOCAL_PORT, "topic": topic}
+    a["open_path"] = "/" + topic
+
+
+def catalog(private=True):
+    """Every optional app with whether you chose it, its state and the memory it uses now, plus the core apps.
+    private: the request may see secrets such as the ntfy topic (no PIN is set, or the right one came with it)."""
     ids = _apps.chosen(DATA)
     try:
         cs = containers()
@@ -179,6 +195,8 @@ def catalog():
             st = [cs.get(x, "missing") for x in a["services"]]
             a["state"] = "running" if all(x == "running" for x in st) else "missing" if all(x == "missing" for x in st) else "stopped"
         a["memory_now_mb"] = sum(mem.get(x, 0) for x in a["services"]) or None
+        if a["id"] == "ntfy" and a["chosen"]:
+            ntfy_note(a, private)
         out.append(a)
     for a in _custom.view(DATA):
         a["state"] = None if cs is None else cs.get(a["id"], "missing")
@@ -239,7 +257,7 @@ def find_app(text):
             return n
     alias = {"ai chat": "open-webui", "webui": "open-webui", "kuma": "uptime-kuma", "uptime": "uptime-kuma", "ai": "ollama",
              "automation": "n8n", "chart": "grafana", "search": "searxng", "adblock": "adguard", "logs viewer": "dozzle",
-             "home page": "landing", "dashboard": "homepage", "voice": "whisper"}
+             "home page": "landing", "dashboard": "homepage", "voice": "whisper", "phone alerts": "ntfy"}
     return next((v for k, v in alias.items() if k in t), None)
 
 REPO = "theappfoundryco/personal-homelab-server"
@@ -362,7 +380,7 @@ def update_state(fresh=False):
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
+    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "NOTIFY", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
 
     router = app.router
 
@@ -379,7 +397,9 @@ def register(app):
 
     @router.get("/server/catalog")
     def server_catalog(req):
-        return catalog()
+        from core.settings import guard_request
+        sent = req.headers.get("X-Settings-Pin")  # only a PIN that was sent is checked: the home page asks without one, and that must not count as a wrong try
+        return catalog(private=not SETTINGS.pin or bool(sent) and guard_request(SETTINGS, req) is None)
 
     @router.post("/server/apps/change")
     def server_apps_change(req):

@@ -12,7 +12,10 @@ if __name__ == "__main__":
         from core import hardware
         if sys.argv[2:3] == ["--save"] and len(sys.argv) > 3:  # the installer keeps what it saw, because the app in Docker sees only its own virtual machine
             hardware.save(sys.argv[3])
-        print(hardware.render(hardware.view(data_dir=sys.argv[3] if sys.argv[2:3] == ["--save"] and len(sys.argv) > 3 else None)))
+        try:
+            print(hardware.render(hardware.view(data_dir=sys.argv[3] if sys.argv[2:3] == ["--save"] and len(sys.argv) > 3 else None)))
+        except ImportError:  # no PyYAML on this machine: the profile is chosen by the app inside Docker, which has it
+            print(f"This machine: {hardware.describe(hardware.probe())}\nProfile: chosen by the app once it starts.")
         sys.exit(0)
     if sys.argv[1:2] == ["migrate"]:  # saved-data changes a new version needs; update runs this, so it needs no config
         from core import migrations

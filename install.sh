@@ -167,7 +167,7 @@ rec() { # rec kind value: notes something put on this machine outside the folder
   [ "$DRY" = 1 ] && return 0; mkdir -p "$HL_HOME"; grep -qx "$1 $2" "$HL_HOME/installed.txt" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$HL_HOME/installed.txt"
 }
 brew_new() { local f; for f in "$@"; do brew list --formula "$f" >/dev/null 2>&1 || printf '%s ' "$f"; done; } # the ones not installed yet
-rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true; }
+rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 24 || true; }  # tr's broken-pipe warning is expected: head stops reading
 
 main() {  # everything runs inside a function so bash reads the whole file first; editing install.sh while it runs cannot break that run
 banner
@@ -227,33 +227,130 @@ start_docker_mac() { # starts whichever Docker this Mac has, from the terminal
   fi
   [ "$DRY" = 1 ] || wait_docker 120
 }
+# Where Docker comes from on Linux. The same rules as docker_source() in core/hardware/system.py (tests/test_install.py checks they agree),
+# in shell because a bare machine may not have Python yet. get.docker.com only supports the distributions in the first line.
+os_info() { # sets OS_ID, OS_LIKE, OS_VER, OS_UBUNTU, OS_PRETTY and OS_FAM (debian, rhel, suse, arch, alpine, void, gentoo, nixos, amzn or other) from /etc/os-release
+  local f="${HL_OS_RELEASE:-/etc/os-release}" i
+  OS_ID="" OS_LIKE="" OS_VER="" OS_UBUNTU="" OS_PRETTY="" OS_FAM=other
+  # read in a subshell: os-release also sets NAME, VERSION and others this script uses for its own things
+  [ -r "$f" ] && eval "$(. "$f" 2>/dev/null
+    printf 'OS_ID=%q OS_LIKE=%q OS_VER=%q OS_UBUNTU=%q OS_PRETTY=%q' "${ID:-}" "${ID_LIKE:-}" "${VERSION_ID:-}" "${UBUNTU_CODENAME:-}" "${PRETTY_NAME:-}")"
+  for i in $OS_ID $OS_LIKE; do
+    case "$i" in
+      debian|ubuntu|raspbian) OS_FAM=debian ;; amzn) OS_FAM=amzn ;; fedora|rhel|centos|rocky|almalinux|ol) OS_FAM=rhel ;;
+      opensuse*|suse|sles) OS_FAM=suse ;; arch|archarm|manjaro) OS_FAM=arch ;; alpine|postmarketos) OS_FAM=alpine ;; void|gentoo|nixos) OS_FAM=$i ;; *) continue ;;
+    esac; break
+  done
+}
+docker_plan() { # sets DK_HOW (script, package or by-hand), DK_CMD, DK_NOTE and DK_NAME from /etc/os-release
+  os_info
+  local ID="$OS_ID" VERSION_ID="$OS_VER" UBUNTU_CODENAME="$OS_UBUNTU" PRETTY_NAME="$OS_PRETTY" fam="$OS_FAM"
+  DK_NAME="${PRETTY_NAME:-${ID:-this system}}" DK_CMD="" DK_NOTE=""
+  if [ "$ID.$VERSION_ID" = ubuntu.20.04 ]; then  # get.docker.com stops here: it wants docker-model-plugin, which is not published for 20.04
+    DK_HOW=package DK_CMD="sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
+    DK_NOTE="$DK_NAME has reached its end of life, and Docker's own installer no longer works on it, so Docker comes from Ubuntu's packages."; return
+  fi
+  case "$ID" in
+    ubuntu|debian|raspbian|centos|rhel|rocky|almalinux|fedora|ol)
+      DK_HOW=script
+      case "$ID.${VERSION_ID%%.*}" in debian.11|debian.10|centos.8|centos.7|rhel.7) DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade." ;; esac
+      case "$ID.$VERSION_ID" in ubuntu.20.04|ubuntu.18.04) DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade." ;; esac
+      [ "$ID" = fedora ] && [ "${VERSION_ID:-0}" -lt 43 ] 2>/dev/null && DK_NOTE="$DK_NAME has reached its end of life. Docker still installs, but plan to upgrade."
+      DK_CMD="curl -fsSL https://get.docker.com | sudo sh"; return ;;
+  esac
+  DK_HOW=package
+  case "$fam" in
+    arch) DK_CMD="sudo pacman -S --needed --noconfirm docker docker-compose docker-buildx && sudo systemctl enable --now docker" ;;
+    alpine) DK_CMD="sudo apk add docker docker-cli-compose && sudo rc-update add docker default && sudo rc-service docker start" ;;
+    suse) DK_CMD="sudo zypper --non-interactive install docker docker-compose && sudo systemctl enable --now docker" ;;
+    void) DK_CMD="sudo xbps-install -Sy docker docker-compose && sudo ln -sf /etc/sv/docker /var/service/" ;;
+    *) DK_HOW=by-hand ;;
+  esac
+  [ "$DK_HOW" = package ] && return
+  case "$ID/$fam" in
+    nixos/*|*/nixos) DK_NOTE="Docker is set up in your NixOS configuration: add  virtualisation.docker.enable = true;  then run  sudo nixos-rebuild switch" ;;
+    gentoo/*|*/gentoo) DK_NOTE="Install Docker with:  sudo emerge --ask app-containers/docker app-containers/docker-compose  then start it with your init system." ;;
+    amzn/*|*/amzn) DK_NOTE="Amazon Linux has Docker (sudo dnf install docker) but not its compose part. Install the compose plugin from https://docs.docker.com/compose/install/linux/" ;;
+    */debian)
+      if [ -n "$UBUNTU_CODENAME" ]; then
+        DK_HOW=package DK_CMD="sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-v2 && sudo systemctl enable --now docker"
+        DK_NOTE="Docker comes from your distribution's packages, because Docker's own installer does not know this distribution by name."
+      else DK_NOTE="Docker's installer does not know this distribution by name. Install Docker Engine and its compose plugin with Docker's Debian steps: https://docs.docker.com/engine/install/debian/"; fi ;;
+    *) DK_NOTE="Docker's installer does not support ${PRETTY_NAME:-${ID:-this system}}. Install Docker and its compose plugin with your package manager, then run install.sh again." ;;
+  esac
+}
+need_sudo() { # stop with what to do when sudo is missing (minimal Debian has none), instead of a raw "command not found"
+  command -v sudo >/dev/null 2>&1 && return 0
+  [ "$DRY" = 1 ] && return 0
+  stop "Installing $1 needs sudo, which is not on this machine. As root, install the sudo package and add your user to the sudo (or wheel) group, then log in again and run install.sh."
+}
+# The homelab command and the host helper are Python. A minimal Linux (Arch, Alpine, openSUSE, Void) may not have it.
+if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
+  os_info
+  case "$OS_FAM" in
+    debian) PY_CMD="sudo apt-get update -qq && sudo apt-get install -y python3 python3-yaml" ;; rhel|amzn) PY_CMD="sudo dnf install -y python3 python3-pyyaml" ;;
+    suse) PY_CMD="sudo zypper --non-interactive install python3 python3-PyYAML" ;; arch) PY_CMD="sudo pacman -S --needed --noconfirm python python-yaml" ;;
+    alpine) PY_CMD="sudo apk add python3 py3-yaml" ;; void) PY_CMD="sudo xbps-install -Sy python3 python3-yaml" ;; *) PY_CMD="" ;;
+  esac
+  if [ -n "$PY_CMD" ]; then
+    say "        Python 3 is needed by the homelab command and the host helper. ${D}$PY_CMD${R}"
+    need_sudo "Python 3"
+    do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
+    step "Installing Python 3" "Python 3 installed" sh -c "$PY_CMD" && rec python-linux yes || warn "Could not install Python 3. Install it yourself, then run install.sh again: $PY_CMD"
+  else
+    warn "Python 3 is not installed. The homelab command needs it: install python3 with your package manager."
+  fi
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   warn "Docker is not installed. It runs the assistant and its apps."
   if [ "$OS" = mac ]; then
     say "        Installing Colima (a light Docker with no app to open) with Homebrew."
     install_docker_mac || stop "Could not install Docker. Install it yourself (brew install colima docker docker-compose), then run install.sh again."
   else
-    say "        Installing it with Docker's own installer for Linux (get.docker.com). It asks for your password."
-    if command -v curl >/dev/null 2>&1; then
-      do_it sh -c 'curl -fsSL https://get.docker.com | sudo sh' || stop "Docker's installer failed. See the messages above."
-      rec docker-linux yes
-      do_it sudo systemctl enable --now docker
-      do_it sudo usermod -aG docker "${USER:-$(id -un)}"
-    else
-      say "        curl is missing, so Docker can't be downloaded. Install Docker yourself, then run install.sh again."
-      [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
-      exit 1
-    fi
+    docker_plan
+    case "$DK_HOW" in
+      script)
+        say "        Installing it with Docker's own installer for Linux (get.docker.com). It asks for your password."
+        [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
+        if command -v curl >/dev/null 2>&1; then
+          need_sudo Docker
+          do_it sh -c 'curl -fsSL https://get.docker.com | sudo sh' || stop "Docker's installer failed. See the messages above."
+          rec docker-linux yes
+          do_it sudo systemctl enable --now docker
+          do_it sudo usermod -aG docker "${USER:-$(id -un)}"
+        else
+          say "        curl is missing, so Docker can't be downloaded. Install Docker yourself, then run install.sh again."
+          [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
+          exit 1
+        fi ;;
+      package)
+        say "        Installing it from ${DK_NAME}'s own packages, because Docker's installer does not support ${DK_NAME}. It asks for your password."
+        [ -n "$DK_NOTE" ] && say "        ${D}$DK_NOTE${R}"
+        say "        ${D}$DK_CMD${R}"
+        need_sudo Docker
+        do_it sudo -v  # any password prompt happens here, in the open, not behind the spinner
+        step "Installing Docker" "Docker installed" sh -c "$DK_CMD" || stop "Installing Docker did not work. See the lines above, or run it yourself: $DK_CMD"
+        rec docker-linux yes
+        do_it sudo usermod -aG docker "${USER:-$(id -un)}" ;;
+      *)
+        say "        $DK_NOTE"
+        [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
+        exit 1 ;;
+    esac
   fi
   [ "$DRY" = 1 ] && say "  (dry run: the checks below need Docker, so it stops here)" && exit 0
 fi
 docker compose version >/dev/null 2>&1 || stop "Docker is installed but not its 'compose' part. Update Docker, or install the docker-compose-plugin package."
 if ! docker info >/dev/null 2>&1; then
+  denied=0; case "$(docker info 2>&1 || true)" in *[Pp]ermission\ denied*) denied=1 ;; esac  # not a pipe into grep: with pipefail, docker's own failure would hide the match
   if [ "$OS" = mac ]; then
     start_docker_mac || stop "Docker did not start. Try: colima start   (or orbctl start, or open Docker Desktop), then run install.sh again."
-  elif [ "${HL_REEXEC:-}" != 1 ] && command -v sg >/dev/null 2>&1 && docker info 2>&1 | grep -qi "permission denied"; then
+  elif [ "${HL_REEXEC:-}" != 1 ] && command -v sg >/dev/null 2>&1 && [ "$denied" = 1 ]; then
     say "  Your user was just added to the docker group; continuing with it"
     HL_REEXEC=1 exec sg docker -c "$(printf '%q ' "$0" "$@")"
+  elif [ "$denied" = 1 ]; then  # no sg here (Arch does not ship it), or the re-run still lacks the group
+    stop "Docker is running, but this login started before your user joined the docker group. Log out and back in (or run: newgrp docker), then run install.sh again."
   else stop "Docker is installed but not running or not allowed for your user. Try: sudo systemctl start docker, and sudo usermod -aG docker \$USER (then log out and in)."; fi
 fi
 ok "Docker is running"
@@ -456,10 +553,10 @@ fi
 
 # 6. What this machine can run
 say ""
-if command -v python3 >/dev/null 2>&1 && PYTHONPATH="$HERE" python3 -W ignore -c 'import yaml' >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then  # PyYAML is not needed to read and save the machine, only to name its profile (the app does that if it is missing)
   PYTHONPATH="$HERE" python3 -W ignore -m core hardware $([ "$DRY" = 1 ] || echo "--save $DATA") 2>/dev/null | sed -n '1,2p' | sed 's/^/  /' || warn "Could not read the hardware."
 else
-  warn "Python 3 with PyYAML is not here, so the hardware check is skipped. The setup can still run without it."
+  warn "Python 3 is not here, so the hardware check is skipped. The setup can still run without it."
 fi
 
 # 7. Start
@@ -500,6 +597,7 @@ if [ "$BIND" = 0.0.0.0 ]; then
 fi
 say "  ${D}Telegram is not connected yet. The setup wizard in the dashboard walks you through it.${R}"
 say "  ${D}Look after it with${R} $CMD status  ${D}(also: update, backup, modules, logs, help)${R}"
+[ "${HL_REEXEC:-}" = 1 ] && say "  ${Y}Open a new terminal (or log out and back in) before you use $CMD: this one started before you joined the docker group.${R}"
 # Last, so nothing is left to answer in the terminal once the browser takes over
 if [ "$OPEN" = 1 ]; then
   say "  ${D}Opening it in your browser...${R}"
