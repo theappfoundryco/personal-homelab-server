@@ -170,7 +170,10 @@ async function setAppsPage(body) {
     : a.state === 'missing' || a.state == null ? `<button class="sact" data-app-add="${esc(a.id)}"${r.docker ? '' : ' disabled'}>Add</button>`
     : `<button class="sact" data-app-rm="${esc(a.id)}">Remove</button>`;
   // the ntfy app says where your phone subscribes: this machine's address (as you opened the dashboard) and the private topic
-  const how = (a) => a.subscribe ? `In the ntfy phone app, add the server ${appURL(a.subscribe.port)} and subscribe to ${a.subscribe.topic}` : a.note || '';
+  // localhost means nothing on a phone: then it says how to open the dashboard (and so this app) to the phone first
+  const near = /^(localhost|127\.|\[?::1)/.test(HOST);
+  const how = (a) => a.subscribe ? `In the ntfy phone app, add the server ${near ? 'at this machine\u2019s address' : appURL(a.subscribe.port)}${near ? `, port ${a.subscribe.port},` : ''} and subscribe to ${a.subscribe.topic}.`
+    + (near ? ' Your phone can reach it once the dashboard opens on your home network or Tailscale (Settings, Who can open the dashboard).' : '') : a.note || '';
   const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${how(a) ? `<small>${esc(how(a))}</small>` : ''}</span>${btn(a)}</div>`;
   const groups = [...new Set(r.apps.map((a) => a.group))];
   const used = [...r.core, ...r.apps].reduce((n, a) => n + (a.memory_now_mb || 0), 0);

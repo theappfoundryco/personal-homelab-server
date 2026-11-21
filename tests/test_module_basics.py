@@ -300,6 +300,10 @@ class Basics(unittest.TestCase):
         self.assertEqual(by["ntfy"]["subscribe"], {"port": 8090, "topic": topic})
         self.assertEqual(by["ntfy"]["open_path"], "/" + topic)  # the tile opens straight on your alerts
         self.assertNotIn("subscribe", by["uptime-kuma"])
+        locked = [a for a in m.catalog(private=False)["apps"] if a["id"] == "ntfy"][0]
+        self.assertNotIn("subscribe", locked)  # with a PIN set and none given, the topic (which reads your alerts) stays hidden
+        self.assertNotIn("open_path", locked)
+        self.assertIn("PIN", locked["note"])
         self.patch(m, NOTIFY=notify.Notifier({"ntfy": "https://ntfy.sh/alex-alerts"}))
         by = {a["id"]: a for a in harness.call(base, "GET", "/server/catalog")[1]["apps"]}
         self.assertNotIn("subscribe", by["ntfy"])

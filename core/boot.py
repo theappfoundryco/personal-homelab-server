@@ -261,7 +261,7 @@ CAPS.register("calendar", "Calendar", lambda: (os.path.exists(ICS_FILE), "No cal
               off=lambda: "No calendar added. Add one in the setup wizard to see your day.")
 CAPS.register("telegram", "Telegram", lambda: (bool(TOKEN and OWNER), "No Telegram bot is set up, so there is no chat."), "Add the bot token and your chat id in the setup wizard.", ttl=300,
               off=lambda: "" if TOKEN else "Telegram is not connected. Connect it in the setup wizard to chat with the assistant.")
-CAPS.register("push", "Alerts outside Telegram (ntfy or Apprise)", lambda: NOTIFY.status() if NOTIFY.extra() else (False, "No ntfy or Apprise address is set."),
+CAPS.register("push", "Phone alerts (ntfy or Apprise)", lambda: NOTIFY.status() if NOTIFY.extra() else (False, "No ntfy or Apprise address is set."),
               "Check the address under notify: in config.yaml, and that the server answers.", ttl=60,
               off=lambda: "" if NOTIFY.extra() else "Alerts go to Telegram only. For your phone without Telegram, add Phone alerts (ntfy) in Settings, Apps, or set notify: in config.yaml.")
 CAPS.register("whisper", "Voice to text (Whisper)", lambda: _capabilities.reachable(WHISPER), "Start the Whisper container, or leave voice notes off.", ttl=60,
