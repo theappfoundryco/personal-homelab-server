@@ -577,7 +577,7 @@ def fire_reminders():
             save()
         if not r["text"].startswith("⏰ Time to wake up"):
             past_add("reminder", r["text"], time.time(), rid)
-        send(f"⏰ <b>Reminder</b>\n{esc(r['text'])}",
+        notify(f"⏰ <b>Reminder</b>\n{esc(r['text'])}",
              [[B("✅ Done", f"remdone:{rid}"), B("💤 10 min", f"snooze:{rid}:10"), B("💤 1 hour", f"snooze:{rid}:60")]])
         if not r["text"].startswith("⏰ Time to wake up"):
             nudged("reminder", text=r["text"])
@@ -657,5 +657,5 @@ def _routes(router):
 
 
 def register(app):
-    host.need(globals(), "B", "TZ", "_lock", "edit", "llm_json", "nice_when", "nudged", "save", "send", "state", "typing")
+    host.need(globals(), "B", "TZ", "_lock", "edit", "llm_json", "nice_when", "notify", "nudged", "save", "send", "state", "typing")
     _routes(app.router)

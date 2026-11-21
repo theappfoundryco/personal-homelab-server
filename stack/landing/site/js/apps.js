@@ -23,16 +23,18 @@ $('#ask-form').onsubmit = async (e) => {
 
 // ---------- Apps (open inside this page) ----------
 const ICON = (n) => `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${n}.png`;
+const OUTSIDE = IOS ? 'Opens in Safari' : 'Opens in a new tab';  // what tapping a tile that cannot show inside this page does, on this device
 const APPS = [
   { name: 'AI chat', sub: 'Talk to your AI', port: 8081, icon: 'open-webui', c: 'open-webui', app: 'open-webui' },
   { name: 'Charts', sub: 'Server history', port: 3000, path: '/d/homelab-command?kiosk', icon: 'grafana', c: 'grafana', app: 'monitoring' },
   { name: 'Uptime', sub: 'Your websites', port: 3001, icon: 'uptime-kuma', c: 'uptime-kuma', app: 'uptime-kuma' },
   { name: 'Search', sub: 'Private search', port: 8889, icon: 'searxng', c: 'searxng', app: 'searxng' },
-  { name: 'Automations', sub: 'Opens in Safari', port: 5678, icon: 'n8n', c: 'n8n', app: 'n8n', outside: true },  // n8n refuses to be shown inside other pages
+  { name: 'Automations', sub: OUTSIDE, port: 5678, icon: 'n8n', c: 'n8n', app: 'n8n', outside: true },  // n8n refuses to be shown inside other pages
 ];
 const TOOLS = [
   { name: 'Ad blocker', sub: 'AdGuard', port: 3002, icon: 'adguard-home', c: 'adguard', app: 'adguard' },
   { name: 'Logs', sub: 'App activity', port: 8888, icon: 'dozzle', c: 'dozzle', app: 'dozzle' },
+  { name: 'Phone alerts', sub: OUTSIDE, port: 8090, icon: 'ntfy', c: 'ntfy', app: 'ntfy', outside: true },  // ntfy's page stays blank inside another page on a plain http address
   { name: 'Metrics', sub: 'Prometheus', port: 9090, icon: 'prometheus', c: 'prometheus', app: 'monitoring' },
   { name: 'Dashboard', sub: 'Everything', port: 3080, icon: 'homarr', c: 'homepage', app: 'homepage' },
 ];
@@ -66,6 +68,7 @@ async function loadInstalled() {
       tilesInstalled = new Set(r.apps.filter((a) => !a.custom && (a.chosen || a.state === 'running' || a.state === 'stopped')).map((a) => a.id));
       tilesCustom = r.apps.filter((a) => a.custom).map((a) => ({ name: a.title, sub: 'Your app', port: a.port, c: a.id, tile: a.tile }));
       tilesLabel = (r.labelled || []).map((t) => ({ name: t.name, sub: t.sub, url: t.url, icon: t.icon || undefined, group: t.group }));  // running containers that asked for a tile
+      r.apps.filter((a) => a.open_path).forEach((a) => TOOLS.concat(APPS).filter((t) => t.app === a.id).forEach((t) => { t.path = a.open_path; }));  // e.g. ntfy opens on your alerts topic
     }
   } catch (e) { tilesInstalled = null; }
   renderTiles();

@@ -103,11 +103,15 @@ class Ctx:
 
     def running(self):
         rc, text = self.run(["docker", "ps", "--format", "{{.Names}}"])
+        self.denied = rc != 0 and "permission denied" in text.lower()  # in the docker group, but this terminal started before that
         return rc == 0 and "telegram-bot" in text.split()
 
     def version(self):
         rc, text = self.git("describe", "--tags", "--always")
         return text if rc == 0 and text else "unknown"
+
+
+DENIED = "  stop  Docker refused your user: this terminal was opened before you joined the docker group. Open a new terminal (or log out and back in), then try again."
 
 
 def services(c):
@@ -122,6 +126,9 @@ def status(c):
     if not c.docker_ready():
         return 1
     rc, text = c.compose("ps", "-a", "--format", "{{.Service}}|{{.State}}")
+    if rc != 0 and "permission denied" in text.lower():
+        c.out(DENIED)
+        return 1
     states = dict(l.split("|", 1) for l in text.splitlines() if "|" in l) if rc == 0 else {}
     for s in services(c):
         c.out(f"  {s}: {states.get(s, 'not created')}")
@@ -140,7 +147,16 @@ def status(c):
 def start(c):
     if not c.docker_ready():
         return 1
-    return c.compose("up", "-d", "--build", *services(c), stream=True)[0]
+    return c.compose("up", "-d", "--build", *services(c), stream=True)[0] or wait_up(c)
+
+
+def wait_up(c):
+    """After start or restart, wait for the dashboard to answer, so a status or update run right after does not find it still starting."""
+    if wait_healthy(c, must_be_ok=False):
+        c.out(f"  ok    Dashboard is up: http://localhost:{c.port}")
+        return 0
+    c.out(f"  warn  The apps started, but the dashboard is not answering on port {c.port} after {c.health_wait} seconds. See why with: {NAME} logs")
+    return 1
 
 
 def stop(c):
@@ -152,7 +168,7 @@ def stop(c):
 def restart(c):
     if not c.docker_ready():
         return 1
-    return c.compose("restart", *services(c), stream=True)[0]
+    return c.compose("restart", *services(c), stream=True)[0] or wait_up(c)
 
 
 def logs(c, service=None, follow=False):
@@ -165,7 +181,7 @@ def doctor(c):
     if not c.docker_ready():
         return 1
     if not c.running():
-        c.out(f"  stop  The assistant is not running. Start it with: {NAME} start")
+        c.out(DENIED if getattr(c, "denied", False) else f"  stop  The assistant is not running. Start it with: {NAME} start")
         return 1
     return c.compose("exec", "-T", "telegram-bot", "python", "-m", "core", "doctor", stream=True)[0]
 
@@ -346,7 +362,8 @@ def lan_ip(c):
 
 
 def access(c, mode):
-    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only). Restarts only the dashboard."""
+    """Who can open the dashboard: lan (your home network; needs the settings PIN) or local (this machine only).
+    Restarts only the dashboard, the ntfy app when you have it (your phone subscribes to it) and your own apps."""
     if mode == "lan":
         try:
             with open(os.path.join(c.data, "settings.json")) as f:
@@ -375,7 +392,7 @@ def access(c, mode):
             json.dump({"mode": mode, "url": f"http://{ip}:{c.port}" if ip else ""}, f)
     except OSError:
         pass
-    rc = c.compose("up", "-d", "landing", stream=True)[0]
+    rc = c.compose("up", "-d", "landing", *(["ntfy"] if "ntfy" in _apps.chosen(c.data) else []), stream=True)[0]
     for n in _custom.ids(c.data):  # your own apps follow the same setting
         if os.path.exists(_custom.compose_path(c.data, n)):
             custom_compose(c, n, "up", "-d", stream=True)
@@ -878,7 +895,7 @@ def _uninstall_plan(c, purge):
         keep.append(f"Backups in {c.backups}")
     else:
         keep += [f"Your data in {c.data} (homelab uninstall --purge deletes it)", "Downloaded app images and AI models", "Homebrew packages this program installed (--purge removes them)"]
-    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker"}[k] for k, _ in rec if k in manifest.SHARED]
+    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker", "python-linux": "Python 3"}[k] for k, _ in rec if k in manifest.SHARED]
     if shared:
         keep.append(" and ".join(shared) + ": other programs use it, so it stays")
     keep.append(f"This folder ({c.root}); delete it yourself when you are done")

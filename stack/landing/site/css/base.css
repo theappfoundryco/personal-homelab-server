@@ -76,6 +76,7 @@ main { max-width: 720px; margin: 0 auto;
 .news-btn b { display: block; font-size: var(--t-title); font-weight: 650; letter-spacing: -.01em; }
 .news-btn small { display: block; color: var(--muted); font-size: var(--t-md); }
 .gitb:active { transform: none; }
+.gitb[hidden] { display: none; }  /* only once the GitHub sync has written its status */
 .gitb > span:nth-child(2) { flex: 1; min-width: 0; }
 .gitb b, .gitb small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gitb small.warn { color: var(--warn); }
