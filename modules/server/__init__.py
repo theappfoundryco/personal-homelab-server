@@ -159,6 +159,17 @@ def apps_log_tail():
         return ""
 
 
+def ntfy_note(a):
+    """The ntfy app: which topic to subscribe to on the phone (the dashboard adds this machine's address), and the tile opens it."""
+    from core import notify as _notify
+    if NOTIFY.source() == "config":
+        a["note"] = "Alerts go to the ntfy address set in config.yaml (notify.ntfy), not to this app."
+        return
+    topic = _notify.local_topic(DATA)
+    a["subscribe"] = {"port": _notify.LOCAL_PORT, "topic": topic}
+    a["open_path"] = "/" + topic
+
+
 def catalog():
     """Every optional app with whether you chose it, its state and the memory it uses now, plus the core apps."""
     ids = _apps.chosen(DATA)
@@ -179,6 +190,8 @@ def catalog():
             st = [cs.get(x, "missing") for x in a["services"]]
             a["state"] = "running" if all(x == "running" for x in st) else "missing" if all(x == "missing" for x in st) else "stopped"
         a["memory_now_mb"] = sum(mem.get(x, 0) for x in a["services"]) or None
+        if a["id"] == "ntfy" and a["chosen"]:
+            ntfy_note(a)
         out.append(a)
     for a in _custom.view(DATA):
         a["state"] = None if cs is None else cs.get(a["id"], "missing")
@@ -239,7 +252,7 @@ def find_app(text):
             return n
     alias = {"ai chat": "open-webui", "webui": "open-webui", "kuma": "uptime-kuma", "uptime": "uptime-kuma", "ai": "ollama",
              "automation": "n8n", "chart": "grafana", "search": "searxng", "adblock": "adguard", "logs viewer": "dozzle",
-             "home page": "landing", "dashboard": "homepage", "voice": "whisper"}
+             "home page": "landing", "dashboard": "homepage", "voice": "whisper", "phone alerts": "ntfy"}
     return next((v for k, v in alias.items() if k in t), None)
 
 REPO = "theappfoundryco/personal-homelab-server"
@@ -362,7 +375,7 @@ def update_state(fresh=False):
 
 
 def register(app):
-    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
+    host.need(globals(), "ALWAYS_ON", "APPS", "B", "CAPS", "SETTINGS", "DAILY", "DASH", "DATA", "DOCKER", "NOTIFY", "OLLAMA", "PROM", "U", "_ai", "ai_status", "app_name", "edit", "send", "typing")
 
     router = app.router
 

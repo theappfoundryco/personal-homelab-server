@@ -286,6 +286,25 @@ class Basics(unittest.TestCase):
         self.assertTrue(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "whisper"})[1]["ok"])
         self.assertEqual(asked, [("add", "whisper")])
 
+    def test_the_ntfy_app_says_which_topic_to_subscribe_to(self):
+        import json, tempfile
+        import modules.server as m
+        from core import notify
+        d = tempfile.mkdtemp()
+        json.dump({"apps": ["ntfy"]}, open(os.path.join(d, "apps.json"), "w"))
+        local = notify.Notifier({}, local=lambda: f"{notify.LOCAL}/{notify.local_topic(d)}")
+        self.patch(m, DATA=d, NOTIFY=local, containers=lambda: {"ntfy": "running"}, app_memory=lambda names: {})
+        base = harness.start_api(self.bot)[1]
+        by = {a["id"]: a for a in harness.call(base, "GET", "/server/catalog")[1]["apps"]}
+        topic = notify.local_topic(d)
+        self.assertEqual(by["ntfy"]["subscribe"], {"port": 8090, "topic": topic})
+        self.assertEqual(by["ntfy"]["open_path"], "/" + topic)  # the tile opens straight on your alerts
+        self.assertNotIn("subscribe", by["uptime-kuma"])
+        self.patch(m, NOTIFY=notify.Notifier({"ntfy": "https://ntfy.sh/alex-alerts"}))
+        by = {a["id"]: a for a in harness.call(base, "GET", "/server/catalog")[1]["apps"]}
+        self.assertNotIn("subscribe", by["ntfy"])
+        self.assertIn("config.yaml", by["ntfy"]["note"])  # your own address wins, and the row says so
+
     def test_update_card_compares_versions_and_starts_one_update_through_the_helper(self):
         import json, tempfile
         import modules.server as m

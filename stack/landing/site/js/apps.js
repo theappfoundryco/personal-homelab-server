@@ -33,6 +33,7 @@ const APPS = [
 const TOOLS = [
   { name: 'Ad blocker', sub: 'AdGuard', port: 3002, icon: 'adguard-home', c: 'adguard', app: 'adguard' },
   { name: 'Logs', sub: 'App activity', port: 8888, icon: 'dozzle', c: 'dozzle', app: 'dozzle' },
+  { name: 'Phone alerts', sub: 'ntfy', port: 8090, icon: 'ntfy', c: 'ntfy', app: 'ntfy' },
   { name: 'Metrics', sub: 'Prometheus', port: 9090, icon: 'prometheus', c: 'prometheus', app: 'monitoring' },
   { name: 'Dashboard', sub: 'Everything', port: 3080, icon: 'homarr', c: 'homepage', app: 'homepage' },
 ];
@@ -65,6 +66,7 @@ async function loadInstalled() {
     if (Array.isArray(r.apps)) {
       tilesInstalled = new Set(r.apps.filter((a) => !a.custom && (a.chosen || a.state === 'running' || a.state === 'stopped')).map((a) => a.id));
       tilesCustom = r.apps.filter((a) => a.custom).map((a) => ({ name: a.title, sub: 'Your app', port: a.port, c: a.id, tile: a.tile }));
+      r.apps.filter((a) => a.open_path).forEach((a) => TOOLS.concat(APPS).filter((t) => t.app === a.id).forEach((t) => { t.path = a.open_path; }));  // e.g. ntfy opens on your alerts topic
     }
   } catch (e) { tilesInstalled = null; }
   renderTiles();

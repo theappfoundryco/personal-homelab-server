@@ -169,7 +169,9 @@ async function setAppsPage(body) {
   const btn = (a) => appsBusy[a.id] ? '' : a.custom && a.state !== 'running' && a.state !== 'stopped' ? `<span class="sacts"><button class="sact" data-app-add="${esc(a.id)}"${r.docker ? '' : ' disabled'}>Start</button><button class="sact" data-app-rm="${esc(a.id)}">Remove</button></span>`
     : a.state === 'missing' || a.state == null ? `<button class="sact" data-app-add="${esc(a.id)}"${r.docker ? '' : ' disabled'}>Add</button>`
     : `<button class="sact" data-app-rm="${esc(a.id)}">Remove</button>`;
-  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small></span>${btn(a)}</div>`;
+  // the ntfy app says where your phone subscribes: this machine's address (as you opened the dashboard) and the private topic
+  const how = (a) => a.subscribe ? `In the ntfy phone app, add the server ${appURL(a.subscribe.port)} and subscribe to ${a.subscribe.topic}` : a.note || '';
+  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${how(a) ? `<small>${esc(how(a))}</small>` : ''}</span>${btn(a)}</div>`;
   const groups = [...new Set(r.apps.map((a) => a.group))];
   const used = [...r.core, ...r.apps].reduce((n, a) => n + (a.memory_now_mb || 0), 0);
   body.innerHTML = `<div class="snote"><b>The dashboard and the assistant always run.</b> Add the extras you want; you can remove them any time and their data is kept.${used ? ` Apps are using ${mbText(used)} of memory right now.` : ''}</div>`

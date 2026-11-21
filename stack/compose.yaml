@@ -203,6 +203,21 @@ services:
     ports:
       - "127.0.0.1:8888:8080"
 
+  ntfy:  # optional (homelab apps add ntfy): the assistant sends alerts to it on a private random topic; your phone subscribes in the ntfy app
+    image: binwiederhier/ntfy:v2.38.1
+    container_name: ntfy
+    restart: unless-stopped
+    command: serve
+    environment:
+      TZ: ${HL_TIMEZONE:-UTC}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db  # messages wait here while the phone is offline
+      NTFY_CACHE_DURATION: 24h
+      NTFY_UPSTREAM_BASE_URL: https://ntfy.sh  # iPhones only wake for a push through ntfy.sh; it is sent a hash of the topic and the message id, never the message
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    ports:
+      - "127.0.0.1:8090:80"
+
   watchtower:  # off unless you ask for it: COMPOSE_PROFILES=auto-update in .env. It would fight `homelab update` and move the pinned versions on its own.
     image: nickfedor/watchtower:1.23.2
     container_name: watchtower
@@ -279,6 +294,7 @@ volumes:
   prometheus-data:
   grafana-data:
   uptime-kuma-data:
+  ntfy-cache:
   adguard-work:
   n8n-data:
   ollama-data:

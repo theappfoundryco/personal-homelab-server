@@ -80,6 +80,7 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 | Live logs (Dozzle) | Read every app's log in the browser. |
 | Private search (SearXNG) | Web search for the assistant without tracking. |
 | Automations (n8n) | Connect apps and build your own workflows. |
+| Phone alerts (ntfy) | Your own push server: reminders and alerts reach the free ntfy phone app, with or without Telegram. |
 | Full dashboard (Homepage) | One page with links to every app. |
 | Ad blocker (AdGuard Home) | Blocks ads for every device on your network. Needs port 53, so use a machine that is always on. |
 

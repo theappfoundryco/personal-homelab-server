@@ -122,6 +122,40 @@ class Sending(unittest.TestCase):
         n.send("hi")
         self.assertEqual(posts, [])
 
+    def test_the_ntfy_app_here_is_used_when_no_address_is_set(self):
+        n, posts, _, _ = fake(token="tk_fake")
+        n.local = lambda: "http://ntfy/homelab-abc123"
+        self.assertEqual((n.extra(), n.source()), (["ntfy"], "app"))
+        n.send("hi")
+        url, msg, headers = posts[0]
+        self.assertEqual((url, msg["topic"], headers), ("http://ntfy/", "homelab-abc123", {}))  # the token is only for your own server
+
+    def test_an_address_in_config_wins_over_the_app_here(self):
+        n, posts, _, _ = fake({"ntfy": "https://ntfy.example.com/alex-alerts"}, token="tk_fake")
+        n.local = lambda: "http://ntfy/homelab-abc123"
+        n.send("hi")
+        self.assertEqual((posts[0][0], posts[0][1]["topic"], n.source()), ("https://ntfy.example.com/", "alex-alerts", "config"))
+
+    def test_without_the_app_or_an_address_ntfy_is_off(self):
+        n, posts, _, _ = fake()
+        self.assertEqual((n.extra(), n.source()), ([], ""))
+        n.local = lambda: 1 / 0  # a broken lookup never stops an alert
+        self.assertEqual(n.send("hi"), {"telegram": True})
+
+    def test_the_local_topic_is_made_once_long_and_random(self):
+        import os, tempfile
+        d = tempfile.mkdtemp()
+        t = notify.local_topic(d)
+        self.assertRegex(t, r"^homelab-[0-9a-f]{24}$")
+        self.assertEqual(notify.local_topic(d), t)
+        self.assertNotEqual(notify.local_topic(tempfile.mkdtemp()), t)
+        with open(os.path.join(d, notify.TOPIC_FILE), "w") as f:
+            f.write("not json")
+        self.assertNotEqual(notify.local_topic(d), t)  # a broken file gets a fresh topic instead of an error
+
+    def test_telegram_off_is_fine_when_the_app_is_installed(self):
+        self.assertEqual(notify.problems({"telegram": False}, local=True), [])
+
     def test_long_messages_are_cut_for_ntfy(self):
         n, posts, _, _ = fake({"ntfy": "https://ntfy.sh/alex-alerts"})
         n.send("x" * 9000)
