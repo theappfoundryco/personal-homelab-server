@@ -30,6 +30,11 @@ def echo(req):
 H.router.add_prefix("POST", "/things/", lambda req: {"path": req.path})
 
 
+@H.router.post("/name")
+def name(req):
+    return {"name": req.json().get("name", "").strip()}
+
+
 @H.router.get("/boom")
 def boom(req):
     raise RuntimeError("secret detail")
@@ -61,6 +66,22 @@ class ApiTests(unittest.TestCase):
         code, body = harness.call(self.base, "GET", "/boom")
         self.assertEqual(code, 500)
         self.assertNotIn("secret", str(body))
+
+    def test_a_body_sent_wrong_gets_400_with_why(self):
+        import urllib.request, urllib.error, json
+
+        def raw(body):
+            r = urllib.request.Request(self.base + "/name", data=body, method="POST", headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(r) as f:
+                    return f.status, json.load(f)
+            except urllib.error.HTTPError as e:
+                return e.code, json.load(e)
+        self.assertEqual(raw(b"not json"), (400, {"ok": False, "error": "That request was not valid JSON."}))
+        self.assertEqual(raw(b"[1, 2]"), (400, {"ok": False, "error": "Send the details as a JSON object."}))
+        self.assertEqual(raw(b"7"), (400, {"ok": False, "error": "Send the details as a JSON object."}))
+        self.assertEqual(raw(b'{"name": " Alex "}'), (200, {"name": "Alex"}))
+        self.assertEqual(raw(b'{"name": 5}')[0], 500)  # an object with a wrong value is still the route's problem to report
 
     def test_duplicate_route_is_refused(self):
         with self.assertRaises(ValueError):

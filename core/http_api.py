@@ -8,6 +8,10 @@ from urllib.parse import parse_qs, urlparse
 HANDLED = object()  # a route returns this after writing its own response (a stream)
 
 
+class BadRequest(ValueError):
+    """A body that is not JSON. Answered with 400, not "check the server log": the asker sent it wrong, nothing broke."""
+
+
 class Router:
     def __init__(self, log=print):
         self.routes, self.prefixes, self.log = {}, [], log
@@ -44,10 +48,16 @@ class Request:
         self.path, self.query, self.headers = u.path, {k: v[0] for k, v in parse_qs(u.query).items()}, handler.headers
         self.client = handler.client_address[0]  # who is asking (127.0.0.1 for the host's own helpers)
         self._h = handler
+        self.odd = False  # the body was JSON, but not an object (a list, a number): routes read it with .get()
 
     def json(self):
         n = int(self.headers.get("Content-Length") or 0)
-        return json.loads(self._h.rfile.read(n) or b"{}") if n else {}
+        try:
+            out = json.loads(self._h.rfile.read(n) or b"{}") if n else {}
+        except ValueError:
+            raise BadRequest("That request was not valid JSON.")
+        self.odd = not isinstance(out, dict)
+        return out
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -75,13 +85,19 @@ class Handler(BaseHTTPRequestHandler):
         fn = self.router and self.router.find(method, urlparse(self.path).path)
         if not fn:
             return False
+        req = Request(self)
         try:
-            out = fn(Request(self))
+            out = fn(req)
             if out is HANDLED:
                 return True
             obj, code = out if isinstance(out, tuple) else (out, 200)
             self.reply(obj, code)
         except Exception as e:  # a broken route answers with a message; it never takes the server down
-            self.router.log(f"{method} {self.path} failed: {e}")
-            self.reply({"ok": False, "error": "That didn't work. Check the server log for details."}, 500)
+            if isinstance(e, BadRequest):
+                self.reply({"ok": False, "error": str(e)}, 400)
+            elif req.odd and isinstance(e, (AttributeError, TypeError)):  # a list or a number where the route reads an object
+                self.reply({"ok": False, "error": "Send the details as a JSON object."}, 400)
+            else:
+                self.router.log(f"{method} {self.path} failed: {e}")
+                self.reply({"ok": False, "error": "That didn't work. Check the server log for details."}, 500)
         return True

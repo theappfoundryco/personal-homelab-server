@@ -18,6 +18,9 @@ def geocode(city):
 
 
 HOME = {"city": "London", "country": "United Kingdom", "lat": 51.51, "lon": -0.13, "tz": "Europe/London", **(cfg("home", {}) or {})}
+# A home you picked (the setup wizard, Settings or config.yaml) beats the internet guess, which is often a city away and wrong
+# on a VPN or a rented server. Only the example's own home (these exact numbers) counts as not picked.
+HOME_SET = (HOME["lat"], HOME["lon"]) != (51.51, -0.13)
 
 
 @cached(1800)
@@ -34,13 +37,15 @@ def ip_location():
 
 
 def location(d=None):
-    """Today: a pin he shared (last 24 h), else where the server's internet is. Future days: his calendar's "{name} in X"."""
+    """Today: a pin he shared (last 24 h), else the home picked in setup, else where the server's internet is. Future days: his calendar's "{name} in X"."""
     today = now().date()
     d = d or today
     pin = state.get("here")
     if d == today:
         if pin and time.time() - pin["ts"] < 86400:
             return pin["loc"]
+        if HOME_SET:
+            return {**HOME, "source": "home"}
         if (here := safe(ip_location)):
             return here
     for e in day_events(d):
@@ -49,7 +54,7 @@ def location(d=None):
             g = safe(lambda: geocode(m[1].strip()))
             if g:
                 return {**g, "source": "calendar"}
-    return safe(ip_location) or state.get("last_loc") or HOME
+    return ({**HOME, "source": "home"} if HOME_SET else None) or safe(ip_location) or state.get("last_loc") or HOME
 
 
 def refresh_location():

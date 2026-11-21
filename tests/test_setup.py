@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 import harness
 from core import config, hardware, http_api, settings, setup
@@ -59,6 +60,15 @@ class Progress(unittest.TestCase):
         s.dismiss("telegram")
         self.assertEqual([c["id"] for c in s.view(False)["checklist"]], ["ai"])
         self.assertEqual([c["id"] for c in s.view(False, ["calendar"])["checklist"]], ["ai", "calendar"])
+
+    def test_access_chosen_by_the_installer_counts_as_done(self):
+        # e2e: install.sh opened the dashboard to the home network, then the wizard called Access skipped and asked again
+        s, d = make()
+        s.mark("access", "skipped")
+        json.dump({"mode": "lan", "url": "http://192.168.1.20:3095"}, open(os.path.join(d, "access.json"), "w"))
+        v = s.view(False)
+        self.assertEqual(v["steps"][4]["status"], "done")
+        self.assertNotIn("access", [c["id"] for c in v["checklist"]])
 
     def test_unknown_steps_and_statuses_are_refused(self):
         s, _ = make()
@@ -177,6 +187,21 @@ class Models(unittest.TestCase):
             s.ollama_tags = lambda url, r=reason: (_ for _ in ()).throw(URLError(r))
             self.assertIn(words, s.check_ollama("http://10.0.0.5:11434")[1])
 
+    def test_localhost_for_ollama_means_this_machine_not_the_container(self):
+        alias = setup.Setup.local_alias
+        for typed in ("http://localhost:11434", "http://127.0.0.1:11434/", "http://[::1]:11434", "http://0.0.0.0:11434"):
+            self.assertEqual(alias(typed, in_docker=True), "http://host.docker.internal:11434", typed)
+        self.assertEqual(alias("https://LOCALHOST", in_docker=True), "https://host.docker.internal")
+        for other in ("http://192.168.1.20:11434", "http://localhost.example.com:11434", "10.0.0.5", ""):
+            self.assertEqual(alias(other, in_docker=True), other)
+        self.assertEqual(alias("http://localhost:11434", in_docker=False), "http://localhost:11434")  # run outside Docker, localhost is right
+        from urllib.error import URLError
+        s, _ = make()
+        s.ollama_tags = lambda url: (_ for _ in ()).throw(URLError(ConnectionRefusedError("Connection refused")))
+        why = s.check_ollama("http://host.docker.internal:11434")[1]
+        self.assertIn("OLLAMA_HOST=0.0.0.0", why)  # this machine's Ollama listens only to itself: say how to open it
+        self.assertNotIn("steps below", why)
+
 
 class Routes(unittest.TestCase):
     def build(self, probe=NVIDIA, telegram_on=False, pin=None, add_app=None, host_do=None, **kw):
@@ -286,6 +311,13 @@ class Routes(unittest.TestCase):
         self.assertEqual(run("POST", "/setup/ai", {"mode": "remote", "url": "http://10.0.0.5:11434/"})[0], 200)
         self.assertEqual(self.settings.merged()["ollama"]["url"], "http://10.0.0.5:11434")
         self.assertEqual(run("POST", "/setup/ai", {"mode": "wat"})[0], 400)
+        asked = []
+        self.setup.ollama_tags = lambda url: asked.append(url) or {}
+        real = setup.Setup.local_alias
+        with mock.patch.object(setup.Setup, "local_alias", staticmethod(lambda url: real(url, in_docker=True))):
+            self.assertEqual(run("POST", "/setup/ai", {"mode": "remote", "url": "http://localhost:11434"})[0], 200)
+        self.assertEqual(asked, ["http://host.docker.internal:11434"])
+        self.assertEqual(self.settings.merged()["ollama"]["url"], "http://host.docker.internal:11434")  # the one on this machine, as Docker reaches it
 
     def test_ai_install_sets_the_models_and_downloads_them(self):
         run = self.build(pull_stream=lambda url, m: iter([{"status": "success"}]))

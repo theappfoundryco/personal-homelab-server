@@ -30,6 +30,24 @@ DOCKER_BY_HAND = {
     "amzn": "Amazon Linux has Docker (sudo dnf install docker) but not its compose part. Install the compose plugin from https://docs.docker.com/compose/install/linux/",
 }
 
+# PyYAML from the system's own packages: pip is refused for the system Python on Ubuntu 23.04+, Debian 12+ and Fedora 38+.
+PYYAML = {
+    "debian": "sudo apt-get install -y python3-yaml", "rhel": "sudo dnf install -y python3-pyyaml", "fedora": "sudo dnf install -y python3-pyyaml",
+    "amzn": "sudo dnf install -y python3-pyyaml", "suse": "sudo zypper install python3-PyYAML", "arch": "sudo pacman -S python-yaml",
+    "alpine": "sudo apk add py3-yaml", "void": "sudo xbps-install -S python3-yaml",
+}
+
+
+def pyyaml_fix(read=None, system=None):
+    """The command that installs PyYAML on this machine: the distribution's package on Linux, pip for the user elsewhere."""
+    import platform as _platform
+    system = system or _platform.system()
+    if system == "Linux":
+        cmd = PYYAML.get(family(parse_os_release((read or _read)("/etc/os-release"))))
+        if cmd:
+            return cmd
+    return "python3 -m pip install --user pyyaml"
+
 
 def parse_os_release(text):
     """/etc/os-release as a dict of its keys, quotes removed. ID_LIKE becomes a list. Empty dict for no text."""

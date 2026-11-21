@@ -3,6 +3,7 @@ the Telegram connection (token, then your chat id from a /start message), the AI
 Every outside call is injectable, so tests never touch Telegram or Ollama. Secrets are written only to the data folder, mode 600, and never sent back."""
 import json
 import os
+import re
 import sys
 import threading
 from urllib.error import HTTPError, URLError
@@ -123,6 +124,8 @@ class Setup:
         s = self.state()
         steps = (s or {}).get("steps", {})
         first_run = s is None and not telegram_on
+        if read_json(os.path.join(self.dir, "access.json"), {}).get("mode") in ("lan", "local"):  # chosen already, by install.sh or homelab access
+            steps = {**steps, "access": "done"}
         rows = [{"id": i, "title": t, "status": steps.get(i, "pending")} for i, t in STEPS]
         todo = [r["id"] for r in rows if r["status"] != "done"]
         dismissed = (s or {}).get("dismissed", [])
@@ -193,6 +196,16 @@ class Setup:
         return {"state": "waiting"}
 
     # ---- the AI engine
+    @staticmethod
+    def local_alias(url, in_docker=None):
+        """localhost, 127.x, ::1 or 0.0.0.0 typed for an Ollama on this machine: inside Docker those mean the assistant's own
+        container, so the address becomes host.docker.internal (this machine as Docker apps reach it), keeping scheme and port."""
+        url = (url or "").strip().rstrip("/")
+        if not (os.path.exists("/.dockerenv") if in_docker is None else in_docker):
+            return url
+        m = re.match(r"(?i)^(https?://)(localhost|127(?:\.\d+){3}|0\.0\.0\.0|\[::1?\])(:\d+)?(/.*)?$", url)
+        return f"{m.group(1)}host.docker.internal{m.group(3) or ''}{m.group(4) or ''}" if m else url
+
     def check_ollama(self, url):
         """(ok, message) for another machine's Ollama."""
         url = (url or "").strip().rstrip("/")
@@ -204,7 +217,10 @@ class Setup:
             return False, f"Something answered at {url}, but it is not Ollama. Check the port (Ollama uses 11434)."
         except (URLError, OSError, ValueError) as e:
             why = str(getattr(e, "reason", e)).lower()
-            if "refused" in why:
+            if "refused" in why and "host.docker.internal" in url:
+                hint = ("This machine answered, but its Ollama only listens to itself, so the assistant in Docker cannot reach it. On Linux run "
+                        "sudo systemctl edit ollama, add the two lines [Service] and Environment=\"OLLAMA_HOST=0.0.0.0\", then sudo systemctl restart ollama.")
+            elif "refused" in why:
                 hint = "The machine answered, but Ollama only listens to itself there. Open it to your network with the steps below."
             elif "timed out" in why or "timeout" in why:
                 hint = "Nothing answered. Check that the machine is on, on the same network or Tailscale, and that its firewall allows port 11434."
@@ -451,10 +467,10 @@ def routes(router, setup, settings, hardware_view, modules, telegram_on, caps_mi
             return {"ok": True}
         url = None
         if mode == "remote":
-            ok, why = setup.check_ollama(b.get("url"))
+            url = setup.local_alias(b.get("url"))  # localhost means this machine to you, but the assistant's container to Docker
+            ok, why = setup.check_ollama(url)
             if not ok:
                 return {"ok": False, "error": why}, 400
-            url = b["url"].strip().rstrip("/")
             okset, problems = settings.set({"ollama.url": url})
             if not okset:
                 return {"ok": False, "problems": problems}, 400

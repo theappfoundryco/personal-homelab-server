@@ -32,7 +32,7 @@ class Registry(unittest.TestCase):
     def test_arguments_are_checked_and_said_plainly(self):
         self.assertEqual(self.t.call("echo", {"word": "hi", "times": "2"}), ("hi hi", True))  # a number written as text is fine
         self.assertEqual(self.t.call("echo", {}), ("echo needs word.", False))
-        self.assertEqual(self.t.call("echo", {"word": "hi", "times": True}), ("times should be a integer.", False))
+        self.assertEqual(self.t.call("echo", {"word": "hi", "times": True}), ("times should be an integer.", False))
         self.assertEqual(self.t.call("echo", {"word": "hi", "rm": "-rf"}), ("echo does not take rm.", False))
         self.assertEqual(self.t.call("nope", {}), ("There is no tool called nope.", False))
         self.assertEqual(self.t.call("broken", {})[1], False)
@@ -114,6 +114,11 @@ class CommandLine(Base):
         self.assertIn(token, self.say())  # the same token again
         cli.main(["mcp", "off"], self.ctx)
         self.assertFalse(os.path.exists(os.path.join(self.data, tools.TOKEN_FILE)))
+
+    def test_mcp_on_while_the_assistant_is_stopped_says_so(self):
+        self.fake.running = False
+        self.assertEqual(cli.main(["mcp"], self.ctx), 0)
+        self.assertIn("The assistant is not running, so MCP answers once you start it: homelab start", self.say())
 
 
 if __name__ == "__main__":

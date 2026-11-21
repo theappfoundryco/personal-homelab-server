@@ -300,6 +300,23 @@ if [ "$OS" = linux ] && ! command -v python3 >/dev/null 2>&1; then
   else
     warn "Python 3 is not installed. The homelab command needs it: install python3 with your package manager."
   fi
+# Most Linux has Python but not PyYAML, which reads config.yaml (the network question, homelab apps store add).
+# The system's own package, because pip is refused on Ubuntu 23.04+, Debian 12+ and Fedora 38+.
+elif [ "$OS" = linux ] && ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  os_info
+  case "$OS_FAM" in
+    debian) Y_CMD="sudo apt-get update -qq && sudo apt-get install -y python3-yaml" ;; rhel|amzn) Y_CMD="sudo dnf install -y python3-pyyaml" ;;
+    suse) Y_CMD="sudo zypper --non-interactive install python3-PyYAML" ;; arch) Y_CMD="sudo pacman -S --needed --noconfirm python-yaml" ;;
+    alpine) Y_CMD="sudo apk add py3-yaml" ;; void) Y_CMD="sudo xbps-install -Sy python3-yaml" ;; *) Y_CMD="" ;;
+  esac
+  if [ -n "$Y_CMD" ] && [ "$DRY" = 1 ]; then say "  would run: $Y_CMD"
+  elif [ -n "$Y_CMD" ] && command -v sudo >/dev/null 2>&1; then
+    say "        PyYAML (reads your settings file) is needed by the homelab command. ${D}$Y_CMD${R}"
+    do_it sudo -v
+    step "Installing PyYAML" "PyYAML installed" sh -c "$Y_CMD" && rec pyyaml-linux yes || warn "Could not install PyYAML. Install it yourself, then run install.sh again: $Y_CMD"
+  else
+    warn "PyYAML is not installed, so a few homelab commands will not work. Install it with your package manager (python3-yaml)."
+  fi
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -548,6 +565,10 @@ if [ -n "$BIND" ]; then
     grep -v '^HL_BIND=' "$STACK/.env" > "$STACK/.env.new" || true
     printf 'HL_BIND=%s\n' "$BIND" >> "$STACK/.env.new"; mv "$STACK/.env.new" "$STACK/.env"; chmod 600 "$STACK/.env"
     ok "dashboard reachable from: $([ "$BIND" = 0.0.0.0 ] && echo 'your network (PIN required for changes)' || echo 'this machine only')"
+    # what homelab access writes too, so the setup wizard shows this choice as made instead of asking again
+    if [ "$BIND" = 0.0.0.0 ]; then AIP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"; [ -n "$AIP" ] || AIP="$(ipconfig getifaddr en0 2>/dev/null || true)"
+      printf '{"mode": "lan", "url": "%s"}\n' "${AIP:+http://$AIP:$HL_PORT}" > "$DATA/access.json"
+    else printf '{"mode": "local", "url": ""}\n' > "$DATA/access.json"; fi
   fi
 fi
 

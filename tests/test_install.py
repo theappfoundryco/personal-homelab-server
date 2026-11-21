@@ -1,6 +1,6 @@
 """install.sh against pretend systems: fake uname, docker, df, lsof and curl on an otherwise empty PATH, in a throwaway copy of the folder.
 Nothing real is started. What it cannot show is a real Docker on a real Linux box."""
-import json, os
+import json, os, sys
 import shutil
 import stat
 import subprocess
@@ -256,6 +256,30 @@ esac''', "hostname": 'echo "192.168.1.20 10.0.0.5"'}
         self.assertIn("sudo apk add python3 py3-yaml", self.calls())
         self.assertIn("python-linux yes", open(os.path.join(self.home, "installed.txt")).read())
 
+    def test_python_without_pyyaml_gets_pyyaml_from_its_own_packages(self):
+        # a fresh Ubuntu: Python is there, PyYAML is not, and pip is refused for the system Python
+        real = os.path.realpath(os.path.join(self.bin, "python3"))
+        self.without("python3")
+        self.stub("python3", table={"python3": f'case "$*" in *"import yaml"*) [ -e "$FAKE_LOG.yaml" ]; exit $?;; esac; exec {real} "$@"'})
+        self.stub("sudo", table={"sudo": 'echo "sudo $*" >> "$FAKE_LOG"; case "$*" in *python3-yaml*) touch "$FAKE_LOG.yaml";; esac; exit 0'})
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-24.04"))
+        self.assertIn("PyYAML installed", out)
+        self.assertIn("sudo apt-get install -y python3-yaml", self.calls())
+        self.assertNotIn("pip", self.calls())
+        open(self.log, "w").close()
+        self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-24.04"))
+        self.assertNotIn("python3-yaml", self.calls())  # once it is there, the next run leaves it
+
+    def test_pyyaml_missing_names_the_package_for_this_system(self):
+        sys.path.insert(0, ROOT)
+        from core.hardware import system
+        osr = lambda text: (lambda p: text)
+        self.assertEqual(system.pyyaml_fix(osr("ID=ubuntu\nID_LIKE=debian\n"), "Linux"), "sudo apt-get install -y python3-yaml")
+        self.assertEqual(system.pyyaml_fix(osr("ID=fedora\n"), "Linux"), "sudo dnf install -y python3-pyyaml")
+        self.assertEqual(system.pyyaml_fix(osr('ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\n'), "Linux"), "sudo zypper install python3-PyYAML")
+        self.assertEqual(system.pyyaml_fix(osr(None), "Linux"), "python3 -m pip install --user pyyaml")
+        self.assertEqual(system.pyyaml_fix(system="Darwin"), "python3 -m pip install --user pyyaml")
+
     def test_a_new_docker_group_without_sg_says_to_log_in_again(self):
         self.stub("docker", table={"docker": 'case "$1 $2" in "compose version") exit 0;; "info "*) echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1;; esac; exit 0'})
         rc, out = self.run_it("--no-open")
@@ -372,7 +396,10 @@ esac''', "hostname": 'echo "192.168.1.20 10.0.0.5"'}
         self.assertEqual(rc, 0, out)
         self.assertIn("HL_BIND=0.0.0.0\n", self.env())
         self.assertIn("your network", out)
+        access = os.path.join(self.home, "data", "access.json")
+        self.assertEqual(json.load(open(access))["mode"], "lan")  # so the setup wizard does not ask again
         self.assertEqual(self.run_it("--no-open", "--local")[0], 0)
+        self.assertEqual(json.load(open(access)), {"mode": "local", "url": ""})
         self.assertEqual([l for l in self.env().splitlines() if l.startswith("HL_BIND=")], ["HL_BIND=127.0.0.1"])
         self.assertIn("HL_BIND=127.0.0.1\n", self.env())
 
