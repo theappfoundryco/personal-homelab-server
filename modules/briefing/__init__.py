@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from core import app as _app
 from core import host
 from core.helpers import cached, esc, http, now, safe
 
@@ -157,6 +158,9 @@ def build_briefing(recap=False):
     if recap:
         line = backup_line()
         sections.append(("💾", "BACKUPS", "", [(esc(line), line)]))
+    for more in _app.BRIEF_LINES:  # sections modules add (your home, from Home Assistant)
+        for icon, name, lines in safe(more, []) or []:
+            sections.append((icon, name, "", [(esc(l), l) for l in lines]))
     gs = [g for g in state.get("goals", []) if not g.get("achieved")]
     if gs:  # his life goals close the briefing
         sections.append(("🎯", "GOALS", "", [(f"• {esc(g['text'])}", f"• {g['text']}") for g in gs]))

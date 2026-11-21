@@ -13,7 +13,7 @@ class BotCaps(unittest.TestCase):
         srv.shutdown()
         self.assertEqual(code, 200)
         names = {c["name"]: c for c in body["capabilities"]}
-        self.assertEqual(set(names), {"ollama", "internet", "calendar", "gmail", "telegram", "whisper", "docker_reader", "host_agent"})
+        self.assertEqual(set(names), {"ollama", "internet", "calendar", "gmail", "telegram", "whisper", "docker_reader", "host_agent", "homeassistant"})
         self.assertFalse(names["ollama"]["ok"])
         self.assertIn("Ollama", names["ollama"]["message"])
 

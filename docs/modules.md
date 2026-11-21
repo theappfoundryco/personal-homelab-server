@@ -43,6 +43,18 @@ It has one function, `register(app)`. `app` gives you:
 - `app.llm`: the Ollama client, if you need AI.
 - `app.telegram`: send and edit messages.
 - `app.intents`: bot commands, name to function.
+- `app.text_hooks`: answer your own sentences in Telegram. Append `fn(text, lowered)` and return True when it answered; return False and the rest of the bot answers. Hooks run after the bot's own commands and before the AI classifier.
+  ```python
+  def hear(text, t):
+      if t.startswith("feed the cat"):
+          send("🐈 Done.")
+          return True
+      return False
+  app.text_hooks.append(hear)
+  ```
+- `app.taps`: the buttons you send. `app.taps["pets:"] = fn(data, message)` gets every button whose data starts with `pets:`.
+- `app.brief_lines`: add a section to the morning brief. Append `fn()` returning `[(icon, "NAME", ["one line"])]`, or `[]` when there is nothing to say.
+- `app.caps.register(...)`: add your own capability, so the doctor shows whether it works and how to fix it (see `modules/homeassistant`).
 
 ## 4. Handle missing things politely
 

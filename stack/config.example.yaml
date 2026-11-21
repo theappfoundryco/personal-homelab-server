@@ -36,3 +36,9 @@ support:                      # shown in the journal's "if it feels like too muc
   therapist: ""               # e.g. "Dr. Sam Lee" (optional)
   helpline_name: ""           # e.g. "988 Suicide & Crisis Lifeline"
   helpline_tel: ""            # e.g. "988". Leave empty to point to findahelpline.com
+
+# Home Assistant (optional): your smart home from Telegram and the morning brief. Also add a long-lived access token to .env as HL_HA_TOKEN
+# (Home Assistant: your profile, Security, Long-lived access tokens). Every change asks Yes or No first.
+# homeassistant:
+#   url: http://192.168.1.20:8123
+#   allow_unlock: false            # true lets Telegram unlock locks and open garage doors and gates (it still asks first)

@@ -1,0 +1,13 @@
+name: homeassistant
+title: "Home Assistant"
+description: "Your smart home from Telegram: turn lights on and off, ask if the door is locked, and a line about your home in the morning brief. Every change asks Yes or No first."
+version: 0.1.0
+default: true                    # does nothing until homeassistant.url is set in config.yaml and HL_HA_TOKEN in .env
+requires: []
+optional: [homeassistant]
+platforms: [linux, mac, wsl]
+settings:
+  url: { type: text, default: "" }
+  allow_unlock: { type: bool, default: false }
+dashboard:
+  home_cards: []
