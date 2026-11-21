@@ -11,6 +11,7 @@ ZONE = "timezone"  # an IANA name like "Europe/London"
 # name -> type. A dict is a section, a list holds one entry type, str/bool/int/float/TIME/ZONE are values.
 SCHEMA = {
     "owner": {"name": str},
+    "homeassistant": {"url": str, "allow_unlock": bool},
     "timezone": ZONE,
     "home": {"city": str, "country": str, "lat": float, "lon": float, "tz": ZONE},
     "dashboard_url": str,
@@ -20,9 +21,10 @@ SCHEMA = {
     "features": {"therapy_recap": bool},
     "support": {"therapist": str, "helpline_name": str, "helpline_tel": str},
     "therapy": {"calendar_words": [str]},
-    "night": {"journal": bool, "journal_at": TIME, "insights": bool, "backup": bool, "backup_at": TIME, "backup_to": str, "backup_keep": int,
+    "night": {"journal": bool, "journal_at": TIME, "insights": bool, "backup": bool, "backup_at": TIME, "backup_to": str, "backup_keep": int, "offsite": bool, "offsite_at": TIME,
               "github": bool, "github_repo": str, "github_at": TIME},  # what runs at night; the host helper does the backup and the GitHub copy
     "news": {"topics": [str], "feeds": [{"name": str, "url": str, "topic": str}], "ai": str, "model": str},  # ai: auto, claude, openai, ollama or none
+    "notify": {"telegram": bool, "ntfy": str, "apprise": str},  # where alerts and reminders go besides chat; see core/notify.py
     "ollama": {"url": str},  # where Ollama runs; default http://ollama:11434 (the compose service)
     "dashboard": {  # how the page is laid out; edited in the dashboard's Settings, never needed in config.yaml
         "tabs": [str],           # bottom menu order, by tab id

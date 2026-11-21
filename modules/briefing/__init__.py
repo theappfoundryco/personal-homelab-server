@@ -5,7 +5,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from core import app as _app
+from core import custom as _custom
 from core import host
+from core import versions as _versions
 from core.helpers import cached, esc, http, now, safe
 
 host.need(globals(), "NAME", "cfg")
@@ -157,6 +160,11 @@ def build_briefing(recap=False):
     if recap:
         line = backup_line()
         sections.append(("💾", "BACKUPS", "", [(esc(line), line)]))
+        if ups := safe(lambda: _versions.news(DATA, _custom.load(DATA)), []):
+            sections.append(("⬆️", "NEW VERSIONS", "", [(f"• {esc(u)}", f"• {u}") for u in ups]))
+    for more in _app.BRIEF_LINES:  # sections modules add (your home, from Home Assistant)
+        for icon, name, lines in safe(more, []) or []:
+            sections.append((icon, name, "", [(esc(l), l) for l in lines]))
     gs = [g for g in state.get("goals", []) if not g.get("achieved")]
     if gs:  # his life goals close the briefing
         sections.append(("🎯", "GOALS", "", [(f"• {esc(g['text'])}", f"• {g['text']}") for g in gs]))
@@ -217,5 +225,5 @@ def _routes(router):
 
 
 def register(app):
-    host.need(globals(), "B", "FEEDS", "TZ", "_lock", "daily", "day_events", "event_line", "f1_lines", "feed_items", "flight_text", "flights", "has_calendar", "headlines_for", "last_headlines", "live_digest", "location", "news_rows", "save", "send", "state", "strip_tags", "t12", "travel_fx", "typing", "weather_data", "weather_lines")
+    host.need(globals(), "B", "DATA", "FEEDS", "TZ", "_lock", "daily", "day_events", "event_line", "f1_lines", "feed_items", "flight_text", "flights", "has_calendar", "headlines_for", "last_headlines", "live_digest", "location", "news_rows", "save", "send", "state", "strip_tags", "t12", "travel_fx", "typing", "weather_data", "weather_lines")
     _routes(app.router)

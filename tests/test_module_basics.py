@@ -17,7 +17,8 @@ class Basics(unittest.TestCase):
 
     def capture(self, mod):
         sent = []
-        self.patch(mod, send=lambda text, buttons=None, **kw: sent.append(text))
+        grab = lambda text, buttons=None, *a, **kw: sent.append(text)
+        self.patch(mod, **{n: grab for n in ("send", "notify") if hasattr(mod, n)})  # replies go through send, pushes through notify
         return sent
 
     def test_world_clock(self):
@@ -284,6 +285,61 @@ class Basics(unittest.TestCase):
         self.assertEqual(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "rm -rf"})[0], 400)
         self.assertTrue(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "whisper"})[1]["ok"])
         self.assertEqual(asked, [("add", "whisper")])
+        from unittest import mock
+        from core import casaos
+        from test_casaos import MEDIA, store
+        with mock.patch.object(casaos, "_get", store({"Jellyfin": MEDIA, "Jellyseerr": MEDIA})):
+            code, out = harness.call(base, "POST", "/server/apps/store", {"name": "jelly"})
+            self.assertEqual((code, out["matches"]), (400, ["Jellyfin", "Jellyseerr"]))
+            code, out = harness.call(base, "POST", "/server/apps/store", {"name": "Jellyfin", "port": "8123"})
+        self.assertTrue(out["ok"], out)
+        self.assertIn("Not opened", " ".join(out["notes"]))
+        self.assertEqual(asked[-1], ("add", "jellyfin"))
+        self.assertEqual(json.load(open(os.path.join(d, "custom.json")))["apps"][0]["port"], 8123)
+
+    def test_containers_with_tile_labels_get_a_tile(self):
+        import modules.server as m
+        listing = [
+            {"Names": ["/jellyfin"], "State": "running", "Labels": {"homelab.tile.url": "http://192.168.1.20:8096", "homelab.tile.title": "Films",
+                                                                     "homelab.tile.icon": "Jellyfin.png", "homelab.tile.group": "tools"}},
+            {"Names": ["/photos"], "State": "running", "Labels": {"homepage.href": "https://photos.example.com", "homepage.name": "Photos",
+                                                                   "homepage.description": "Family albums", "homepage.icon": "mdi-camera"}},
+            {"Names": ["/plain"], "State": "running", "Labels": {"homelab.tile.url": "http://10.0.0.5:9000"}},
+            {"Names": ["/stopped"], "State": "exited", "Labels": {"homelab.tile.url": "http://10.0.0.5:9001"}},
+            {"Names": ["/mine"], "State": "running", "Labels": {"homelab.custom": "mine", "homelab.tile.url": "http://10.0.0.5:9002"}},
+            {"Names": ["/evil"], "State": "running", "Labels": {"homelab.tile.url": "javascript:alert(1)"}},
+            {"Names": ["/again"], "State": "running", "Labels": {"homepage.href": "http://10.0.0.5:9003", "homepage.name": "photos"}},
+            {"Names": ["/odd"], "State": "running", "Labels": None},
+        ]
+        self.assertEqual(m.labelled_tiles(listing), [
+            {"name": "Films", "sub": "From Docker", "url": "http://192.168.1.20:8096", "icon": "jellyfin", "c": "jellyfin", "group": "tools"},
+            {"name": "Photos", "sub": "Family albums", "url": "https://photos.example.com", "icon": "", "c": "photos", "group": "apps"},
+            {"name": "plain", "sub": "From Docker", "url": "http://10.0.0.5:9000", "icon": "", "c": "plain", "group": "apps"},
+        ])  # stopped ones, your own apps, non-web links and a second tile with the same name are left out
+        self.assertEqual(m.labelled_tiles(None), [])
+
+    def test_the_ntfy_app_says_which_topic_to_subscribe_to(self):
+        import json, tempfile
+        import modules.server as m
+        from core import notify
+        d = tempfile.mkdtemp()
+        json.dump({"apps": ["ntfy"]}, open(os.path.join(d, "apps.json"), "w"))
+        local = notify.Notifier({}, local=lambda: f"{notify.LOCAL}/{notify.local_topic(d)}")
+        self.patch(m, DATA=d, NOTIFY=local, containers=lambda: {"ntfy": "running"}, app_memory=lambda names: {})
+        base = harness.start_api(self.bot)[1]
+        by = {a["id"]: a for a in harness.call(base, "GET", "/server/catalog")[1]["apps"]}
+        topic = notify.local_topic(d)
+        self.assertEqual(by["ntfy"]["subscribe"], {"port": 8090, "topic": topic})
+        self.assertEqual(by["ntfy"]["open_path"], "/" + topic)  # the tile opens straight on your alerts
+        self.assertNotIn("subscribe", by["uptime-kuma"])
+        locked = [a for a in m.catalog(private=False)["apps"] if a["id"] == "ntfy"][0]
+        self.assertNotIn("subscribe", locked)  # with a PIN set and none given, the topic (which reads your alerts) stays hidden
+        self.assertNotIn("open_path", locked)
+        self.assertIn("PIN", locked["note"])
+        self.patch(m, NOTIFY=notify.Notifier({"ntfy": "https://ntfy.sh/alex-alerts"}))
+        by = {a["id"]: a for a in harness.call(base, "GET", "/server/catalog")[1]["apps"]}
+        self.assertNotIn("subscribe", by["ntfy"])
+        self.assertIn("config.yaml", by["ntfy"]["note"])  # your own address wins, and the row says so
 
     def test_update_card_compares_versions_and_starts_one_update_through_the_helper(self):
         import json, tempfile
@@ -396,6 +452,15 @@ class Basics(unittest.TestCase):
         m.incident("Test app stopped for a while")
         self.assertEqual([i["text"] for i in self.bot.state["incidents"]], ["Test app stopped for a while"])
         self.assertEqual(sent, [])  # recorded for the recap, never pushed
+
+    def test_a_due_reminder_is_pushed_through_notify(self):
+        import modules.planner as m
+        pushed = []
+        self.patch(m, notify=lambda text, buttons=None, silent=False: pushed.append(text), save=lambda: None,
+                   past_add=lambda *a, **kw: None, nudged=lambda *a, **kw: None)
+        self.patch(m, state={"reminders": [{"id": "r1", "text": "Call Sam", "due": 0, "repeat": None}]})
+        m.fire_reminders()
+        self.assertEqual(pushed, ["⏰ <b>Reminder</b>\nCall Sam"])  # so it reaches ntfy or Apprise too, not only Telegram
 
     def test_briefing_state_is_shared_not_copied(self):
         import modules.briefing as m

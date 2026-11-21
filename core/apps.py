@@ -18,6 +18,7 @@ CATALOG = {
     "dozzle": ("Live logs (Dozzle)", "Read every app's log in the browser.", ("dozzle",), 30, (), "Server"),
     "searxng": ("Private search (SearXNG)", "Web search for the assistant without tracking.", ("searxng",), 150, (), "Tools"),
     "n8n": ("Automations (n8n)", "Connect apps and build your own workflows.", ("n8n",), 300, (), "Tools"),
+    "ntfy": ("Phone alerts (ntfy)", "Your own push server: reminders and alerts reach the free ntfy phone app, with or without Telegram.", ("ntfy",), 30, (), "Tools"),
     "homepage": ("Full dashboard (Homepage)", "One page with links to every app.", ("homepage",), 120, (), "Tools"),
     "adguard": ("Ad blocker (AdGuard Home)", "Blocks ads for every device on your network. Needs port 53, so set it up on a machine that is always on.", ("adguard",), 120, (), "Network"),
 }

@@ -68,7 +68,7 @@ function wzRender() {
   else if (s === 'access') {
     const a = WZ.access;
     const pinBox = a === 'lan' ? `<label class="sfield"><span>PIN (4 to 12 digits)</span><input id="wz-pin" type="password" inputmode="numeric" autocomplete="off"></label>
-      <div class="wz-msg">${wzIcon(WZI.info)}<span>Next opens it to your home network for you. The page blinks for a moment while the dashboard restarts.</span></div>` : '';
+      <div class="wz-msg">${wzIcon(WZI.info)}<span>Next opens it to your home network for you. The page blinks for a moment while the dashboard restarts.${WZ.apps?.ntfy ? ' Phone alerts (ntfy) opens with it, so your phone can subscribe.' : ''}</span></div>` : '';
     const ts = a === 'tailscale' ? `<ol class="wz-steps"><li><span class="n">1</span><span>Install Tailscale on this machine and your phone from tailscale.com/download.</span></li><li><span class="n">2</span><span>Sign in to both with the same account.</span></li><li><span class="n">3</span><span>Open this machine's Tailscale name in your phone's browser. Nothing else to open on your router.</span></li></ol>` : '';
     el.innerHTML = wzShell(5, 'Who can open the dashboard?', 'Choose how you will reach it.',
       wzOpt('local', a === 'local', 'Only this machine', 'Open it at localhost on this computer.', 'Safest') + wzOpt('lan', a === 'lan', 'My home network, with a PIN', 'Phones and laptops at home. Choose a PIN of 4 to 12 digits.')
@@ -179,7 +179,8 @@ function wzTgRender() {
   else if (st === 'wait') body = guide + `<div class="wz-msg good">${wzIcon(WZI.check)}<span>Token accepted</span></div><div class="srow"><span><b>Now send /start to ${WZ.bot ? '@' + esc(WZ.bot) : 'your new bot'}</b><small>Waiting for your message…</small></span></div>`;
   else body = guide + `<label class="sfield${WZ.tgWhy ? ' bad' : ''}"><span>Bot token</span><input id="wz-token" autocomplete="off" spellcheck="false" placeholder="Paste your token here"></label>${WZ.tgWhy ? `<div class="wz-msg bad">${wzIcon(WZI.warn)}<span>${esc(WZ.tgWhy)}</span></div>` : ''}`;
   wzBody().innerHTML = wzShell(4, 'Connect Telegram', 'Chat with your assistant from your phone.', body,
-    '<b>Why:</b> Telegram is how you add notes, ask questions and get your morning briefing. The dashboard works without it. <b>Your token stays on this machine.</b>',
+    '<b>Why:</b> Telegram is how you add notes, ask questions and get your morning briefing. The dashboard works without it.'
+      + (WZ.apps?.ntfy ? ' Reminders and alerts reach the ntfy app either way.' : '') + ' <b>Your token stays on this machine.</b>',
     wzBar('telegram', st === 'ok' ? 'Next' : 'Check token', st === 'ok' ? 'next' : 'tg-token'));
   if (st === 'wait') WZ.timer = setInterval(wzTgPoll, 2000);
 }

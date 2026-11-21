@@ -22,11 +22,14 @@ def report(caps, mods, enabled, started, notes, config=None, platform=None, mach
             state, why = ("degraded" if degraded else "on"), ""
         rows.append({"name": n, "title": m.title, "state": state, "why": why, "degraded": degraded})
     problems = list(getattr(config, "problems", None) or [])
+    from core.hardware import system
+    here = system.checks((machine or {}).get("hardware", {}).get("platform")) if machine else []
     return {"ok": not problems and not any(r["state"] == "failed" for r in rows), "platform": platform,
-            "capabilities": caps.all(), "modules": rows, "config": problems, "machine": machine}
+            "capabilities": caps.all(), "modules": rows, "config": problems, "machine": machine, "here": here}
 
 
 MARK = {"on": "ok  ", "degraded": "warn", "hidden": "--  ", "off": "--  ", "failed": "FAIL"}
+HERE = {"works": "ok  ", "limited": "warn", "unavailable": "--  "}  # unavailable here is normal for that platform, so it is not a warning
 
 
 def render(rep):
@@ -34,6 +37,13 @@ def render(rep):
     out = [f"Health check ({rep['platform']})", ""]
     if rep.get("machine"):
         out += [f"Your machine: {rep['machine']['summary']} ({rep['machine']['recommendation']['title']} profile)", ""]
+    if rep.get("here"):
+        out.append("On this machine")
+        for h in rep["here"]:
+            out.append(f"  {HERE[h['state']]}  {h['title']}" + (f": {h['why']}" if h["why"] else ""))
+            if h["fix"]:
+                out.append(f"        Fix: {h['fix']}")
+        out.append("")
     out.append("Services")
     for c in rep["capabilities"]:
         out.append(f"  {'ok  ' if c['ok'] else '--  ' if c.get('off') else 'warn'}  {c['title']}" + ("" if c["ok"] else f": {c['reason'] or 'not available'}"))

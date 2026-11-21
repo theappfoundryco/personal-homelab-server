@@ -246,7 +246,7 @@ svc() {
   # Probe the local port: the host cannot reach its own tailscale serve listeners
   local line name port path code
   for line in "Homepage|3080|" "Grafana|3000|:3000" "Uptime Kuma|3001|:3001" "AdGuard|3002|:3002" \
-    "n8n|5678|:5678" "Dozzle|8888|:8888" "Prometheus|9090|:9090"; do
+    "n8n|5678|:5678" "ntfy|8090|:8090" "Dozzle|8888|:8888" "Prometheus|9090|:9090"; do
     IFS='|' read -r name port path <<<"$line"
     code=$(curl -s -o /dev/null -m 4 -w '%{http_code}' "http://127.0.0.1:$port/")
     if [[ $code =~ ^[23] ]]; then printf "  ${_GRN}✓${_R} %-12s ${_CYN}http://%s%s${_R}\n" "$name" "$HL_HOST" "$path"

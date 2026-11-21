@@ -44,8 +44,10 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
 | **Telegram bot** | "Remind me to water the plants tomorrow", "any important emails". It answers from your own data. |
+| **Alerts anywhere** | Reminders, server alerts and update reports reach you in Telegram, the ntfy phone app, or 100+ other services through Apprise. Add `notify:` to `config.yaml`; chat stays in Telegram. |
+| **Home Assistant** | Optional. "Turn off the kitchen lights", "is the front door locked", "what's the temperature in the bedroom", and a line about your home in the morning brief. Every change asks Yes or No first; unlocking needs your permission in config. |
 | **Ask your homelab from Claude** | Optional. `homelab mcp` lets Claude Desktop, Claude Code or any MCP client read your reminders, notes, goals, your day, the weather and the server's health. Off until you turn it on, needs its token, and every tool only reads. The assistant uses the same tools when one message asks for two things. |
-| **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. |
+| **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. Any container on the machine can add its own tile with a `homelab.tile.url` label (Homepage's `homepage.href` labels work too). |
 
 <details>
 <summary>More screens</summary>
@@ -70,6 +72,10 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 
 You pick them during setup or later with `homelab apps`. Nothing is installed that you did not choose.
 
+You can add any other Docker image as your own app, pinned to a version. Every Monday the assistant asks its registry whether a newer version is out and says so in the morning recap and in Settings, Apps. It never updates anything by itself.
+
+Or add one from the [CasaOS app store](https://github.com/IceWhaleTech/CasaOS-AppStore) by name, in Settings, Apps or with `homelab apps store add Jellyfin`. Its file is fetched when you ask. Only what an added app is allowed (one container, its web page port, the folders that hold its own data) is taken, and anything left out is listed.
+
 | App | What it is for |
 |---|---|
 | Local AI engine (Ollama) | Runs AI models on this machine for chat, journal summaries and news. |
@@ -80,6 +86,7 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 | Live logs (Dozzle) | Read every app's log in the browser. |
 | Private search (SearXNG) | Web search for the assistant without tracking. |
 | Automations (n8n) | Connect apps and build your own workflows. |
+| Phone alerts (ntfy) | Your own push server: reminders and alerts reach the free ntfy phone app, with or without Telegram. |
 | Full dashboard (Homepage) | One page with links to every app. |
 | Ad blocker (AdGuard Home) | Blocks ads for every device on your network. Needs port 53, so use a machine that is always on. |
 
@@ -89,6 +96,7 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 - **Tested.** Over 340 automated tests, including recorded API replies, and a scan of every change for secrets, emails and public IP addresses.
 - **Safe updates.** When a new version is out, the dashboard shows what it brings (Security, New and Fixed) and updates with one tap, or run `homelab update`. Either way it takes a snapshot first and goes back by itself if anything fails.
 - **Backups in one command.** `homelab backup` saves your data and settings to one file, `homelab restore` brings it back. Backups are plain files, so keep them somewhere safe.
+- **An encrypted copy away from home.** `homelab offsite setup s3:s3.amazonaws.com/your-bucket/homelab` (or Backblaze B2, Azure, Google Cloud, a restic REST server, or a mounted drive) keeps an encrypted copy with [restic](https://restic.net), every night if you turn it on in Settings, Schedule. Only what changed is sent. Keep the password it shows you: without it the copy can never be read.
 - **Private by default.** The dashboard listens on this machine only until you open it to your network with a PIN. The only outside calls are for features you use, such as weather and news feeds.
 - **Open.** MIT licence, built in the open, and written so that one missing piece never takes the rest down.
 
@@ -133,7 +141,10 @@ If `homelab` is not found, run `~/personal-homelab-server/bin/homelab path add` 
 | `homelab doctor` | the full health check, with a fix for each problem |
 | `homelab modules` | list modules, or turn one on or off |
 | `homelab apps` | list the optional apps, or add or remove them |
+| `homelab apps store [word]`, `homelab apps store add <name>` | search the CasaOS app store (about 180 apps) and add one as your own app; anything that needs more power than that is refused, with the reason |
+| `homelab apps custom add`, `check`, `update <name> [version]` | add any Docker image as your own app, see whether a newer version is out, and move to it (it goes back if the new one will not start) |
 | `homelab backup`, `homelab restore` | save your data and settings to one file, bring it back |
+| `homelab offsite setup <address>`, `offsite backup`, `offsite list`, `offsite restore [id]` | an encrypted copy in storage you choose, made, listed and brought back |
 | `homelab access` | who can open the dashboard: this machine only, or your home network with a PIN |
 | `homelab logs`, `start`, `stop`, `restart` | the usual |
 

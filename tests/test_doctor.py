@@ -81,6 +81,18 @@ class DoctorTests(unittest.TestCase):
         rep = {**self.rep(), "machine": {"summary": "16 GB memory", "recommendation": {"title": "Everyday machine"}}}
         self.assertIn("Your machine: 16 GB memory (Everyday machine profile)", doctor.render(rep))
 
+    def test_what_this_machine_can_do_comes_from_the_platform_the_installer_saved(self):
+        machine = {"summary": "8 GB memory", "recommendation": {"title": "Small server"}, "hardware": {"platform": {
+            "system": "linux", "init": "openrc", "where": "machine", "selinux": "off", "docker": "engine", "docker_group": True, "linger": None, "laptop": True,
+            "docker_source": {"note": ""}}}}
+        rep = doctor.report(self.caps, self.mods, ["gym"], ["gym"], {}, None, "linux", machine=machine)
+        self.assertEqual([h["name"] for h in rep["here"]], ["autostart", "always_on"])
+        text = doctor.render(rep)
+        self.assertIn("On this machine\n  --    Host helper and autostart: This machine uses OpenRC.", text)
+        self.assertIn("  warn  Always on: This looks like a laptop.", text)
+        self.assertTrue(rep["ok"])  # a platform limit is not breakage
+        self.assertNotIn("On this machine", doctor.render(self.rep()))  # no machine view, nothing to say
+
 
 if __name__ == "__main__":
     unittest.main()

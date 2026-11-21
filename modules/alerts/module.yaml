@@ -1,6 +1,6 @@
 name: alerts
 title: "Quiet alerts"
-description: "Server problems, F1 and flight changes are recorded quietly and read out in the morning recap."
+description: "Server problems are noted for the morning recap. Only what needs you now (overheating, storage almost full, flight check-in, a race starting) is sent, to Telegram or Phone alerts."
 version: 0.1.0
 default: true
 requires: []
