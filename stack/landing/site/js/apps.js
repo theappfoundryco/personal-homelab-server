@@ -44,14 +44,14 @@ const appHTML = (a, i) => `<button class="card app" data-app="${i}">
 let ALL = [...APPS, ...TOOLS];
 // The tiles: built-in ones only for apps you installed (minus any you hid in Settings), then your own, in Everyday apps and Tools.
 // The list ends with Add apps, which opens Settings, Apps (one wide button, with no heading, while there are no apps). If the app list can't be read, every built-in tile shows, as before.
-let tilesInstalled = null, tilesLayout = {}, tilesCustom = [];  // tilesCustom: the apps you added yourself (Settings, Apps, Add your own)
+let tilesInstalled = null, tilesLayout = {}, tilesCustom = [], tilesLabel = [];  // tilesCustom: the apps you added yourself (Settings, Apps, Add your own); tilesLabel: containers with tile labels
 const ADD_TILE = { name: 'Add apps', sub: 'Choose what to install', add: true };
 const addHTML = () => `<button class="card app app-add" data-app-more><span class="ic"><b>+</b></span><span><b>${ADD_TILE.name}</b><small>${ADD_TILE.sub}</small></span></button>`;
 function renderTiles(layout = tilesLayout) {
   tilesLayout = layout || {};
   const hide = new Set(tilesLayout.tiles_hidden || []), own = (g) => (tilesLayout.tiles || []).filter((t) => (t.group || 'apps') === g && /^https?:\/\//i.test(t.url || ''));
   const have = (a) => !hide.has(a.name) && (!a.app || !tilesInstalled || tilesInstalled.has(a.app));
-  const mine = (g) => tilesCustom.filter((a) => a.tile === g && !hide.has(a.name));
+  const mine = (g) => tilesCustom.filter((a) => a.tile === g && !hide.has(a.name)).concat(tilesLabel.filter((a) => a.group === g && !hide.has(a.name)));
   const apps = [...APPS.filter(have), ...mine('apps'), ...own('apps')], tools = [...TOOLS.filter(have), ...mine('tools'), ...own('tools')];
   ALL = [...apps, ...tools];
   $('#apps').innerHTML = apps.map((a, i) => appHTML(a, i)).join('') + addHTML();
@@ -67,6 +67,7 @@ async function loadInstalled() {
     if (Array.isArray(r.apps)) {
       tilesInstalled = new Set(r.apps.filter((a) => !a.custom && (a.chosen || a.state === 'running' || a.state === 'stopped')).map((a) => a.id));
       tilesCustom = r.apps.filter((a) => a.custom).map((a) => ({ name: a.title, sub: 'Your app', port: a.port, c: a.id, tile: a.tile }));
+      tilesLabel = (r.labelled || []).map((t) => ({ name: t.name, sub: t.sub, url: t.url, icon: t.icon || undefined, group: t.group }));  // running containers that asked for a tile
       r.apps.filter((a) => a.open_path).forEach((a) => TOOLS.concat(APPS).filter((t) => t.app === a.id).forEach((t) => { t.path = a.open_path; }));  // e.g. ntfy opens on your alerts topic
     }
   } catch (e) { tilesInstalled = null; }
