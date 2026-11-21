@@ -39,6 +39,7 @@ function setLocked(r) {
     <label class="sfield"><span>PIN</span><input id="set-pin" type="password" inputmode="numeric" autocomplete="off"></label>
     <button class="sbtn main" id="set-unlock">Unlock</button>`;
   $('#set-unlock').onclick = async () => { SET.pin = $('#set-pin').value.trim(); try { sessionStorage.setItem('spin', SET.pin); } catch (e) {} setRender(); };
+  $('#set-pin').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#set-unlock').click(); } };  // Enter (or Go on a phone keyboard) unlocks too
 }
 async function setRender() {
   setTitle();
@@ -171,7 +172,12 @@ async function setAppsPage(body) {
     : `<button class="sact" data-app-rm="${esc(a.id)}">Remove</button>`;
   const newer = (a) => (a.newer ? `<small class="warnline">Version ${esc(a.newer)} is out (you have ${esc(a.current)}). Move to it in your terminal:</small>${cmdHTML(hlCmd('apps custom update ' + a.id))}` : '')
     + (a.major ? `<small class="warnline">${a.newer ? `A bigger jump, ${esc(a.major)}, is out too` : `Version ${esc(a.major)} is out (you have ${esc(a.current)}), a bigger jump`}. Read its release notes first, then:</small>${cmdHTML(hlCmd(`apps custom update ${a.id} ${a.major}`))}` : '');
-  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${newer(a)}</span>${btn(a)}</div>`;
+  // the ntfy app says where your phone subscribes: this machine's address (as you opened the dashboard) and the private topic
+  // localhost means nothing on a phone: then it says how to open the dashboard (and so this app) to the phone first
+  const near = /^(localhost|127\.|\[?::1)/.test(HOST);
+  const how = (a) => a.subscribe ? `In the ntfy phone app, add the server ${near ? 'at this machine\u2019s address' : appURL(a.subscribe.port)}${near ? `, port ${a.subscribe.port},` : ''} and subscribe to ${a.subscribe.topic}.`
+    + (near ? ' Your phone can reach it once the dashboard opens on your home network or Tailscale (Settings, Who can open the dashboard).' : '') : a.note || '';
+  const rowA = (a) => `<div class="srow"><i class="sdot ${dot(a)}" aria-hidden="true"></i><span><b>${esc(a.title)}</b><small>${esc(a.what)}</small><small>${esc(state(a))}</small>${how(a) ? `<small>${esc(how(a))}</small>` : ''}${newer(a)}</span>${btn(a)}</div>`;
   const groups = [...new Set(r.apps.map((a) => a.group))];
   const used = [...r.core, ...r.apps].reduce((n, a) => n + (a.memory_now_mb || 0), 0);
   body.innerHTML = `<div class="snote"><b>The dashboard and the assistant always run.</b> Add the extras you want; you can remove them any time and their data is kept.${used ? ` Apps are using ${mbText(used)} of memory right now.` : ''}</div>`
@@ -223,7 +229,7 @@ async function setSchedPage(body, note) {
   const r = await setApi('/schedule');
   if (!r.ok) { body.innerHTML = '<div class="err">The schedule can’t be reached right now.</div>'; return; }
   SET.sched = r.jobs;
-  const row = (j) => `<div class="srow sch"><span><b>${esc(j.title)}</b><small>${esc(j.what)}</small>${j.every ? `<small>${esc(j.every)}</small>` : ''}${j.blocked && j.on ? `<small class="warnline">${esc(j.blocked)}</small>` : ''}
+  const row = (j) => `<div class="srow sch"><span><b>${esc(j.title)}</b><small>${esc(j.what)}</small>${j.every ? `<small>${esc(j.every)}</small>` : ''}${j.blocked && (j.on || j.id === 'offsite') ? `<small class="warnline">${esc(j.blocked)}</small>` : ''}
       ${j.time ? `<label class="sinline"${j.on ? '' : ' hidden'} data-sch-for="${j.id}">Time <input class="ntime" type="time" data-sch-time="${esc(j.time)}" value="${j.at24}"></label>` : ''}
       ${j.id === 'backup' ? `<div data-sch-for="backup"${j.on ? '' : ' hidden'}><label class="sfield"><span>Folder on this machine (empty: the backups folder in ~/.homelab)</span><input data-sch-text="night.backup_to" spellcheck="false" value="${esc(j.extra.backup_to)}" placeholder="~/.homelab/backups"></label>
         <label class="sfield"><span>How many to keep</span><input data-sch-num="night.backup_keep" type="number" min="1" max="60" value="${esc(j.extra.backup_keep)}"></label></div>` : ''}
@@ -235,7 +241,7 @@ async function setSchedPage(body, note) {
     <div class="sgroup">Every day</div><section class="card srows">${ids(['briefing', 'news', 'evening']).map(row).join('')}</section>
     <div class="sgroup">Journal</div><section class="card srows">${ids(['journal', 'insights', 'recap']).map(row).join('')}</section>
     <div class="sgroup">Weekly</div><section class="card srows">${ids(['weekly']).map(row).join('')}</section>
-    <div class="sgroup">Safety copies</div><section class="card srows">${ids(['backup', 'github']).map(row).join('')}</section>
+    <div class="sgroup">Safety copies</div><section class="card srows">${ids(['backup', 'github', 'offsite']).map(row).join('')}</section>
     <button class="sbtn main" id="sch-save">Save</button>${note}`;
 }
 async function schedSave() {
@@ -331,6 +337,8 @@ function setTilesPage(body, note) {
   const T = SET.tiles || (SET.tiles = { hidden: new Set(CFG.layout?.tiles_hidden || []), own: (CFG.layout?.tiles || []).map((t) => ({ ...t })) });
   const builtin = [...APPS, ...TOOLS];
   body.innerHTML = `<div class="sgroup">Built in</div><section class="card srows">${builtin.map((a) => `<div class="srow"><span><b>${esc(a.name)}</b><small>${esc(a.sub)}</small></span>${swHTML(!T.hidden.has(a.name), 'tile:' + a.name, a.name)}</div>`).join('')}</section>
+    ${tilesLabel.length ? `<div class="sgroup">From Docker labels</div><section class="card srows">${tilesLabel.map((a) => `<div class="srow"><span><b>${esc(a.name)}</b><small>${esc(a.url)} (${a.group === 'tools' ? 'Tools' : 'Everyday apps'})</small></span>${swHTML(!T.hidden.has(a.name), 'tile:' + a.name, a.name)}</div>`).join('')}</section>` : ''}
+    <div class="snote">Any container on this machine can add its own tile with the label <b>homelab.tile.url</b> (or Homepage's <b>homepage.href</b>), plus optional <b>homelab.tile.title</b>, <b>.sub</b>, <b>.icon</b> and <b>.group</b> (apps or tools).</div>
     <div class="sgroup">Your own</div><section class="card srows">${T.own.length ? T.own.map((t, i) => `<div class="srow"><span><b>${esc(t.name)}</b><small>${esc(t.url)} (${t.group === 'tools' ? 'Tools' : 'Everyday apps'})</small></span><button class="mini" data-del-tile="${i}" aria-label="Delete ${esc(t.name)}">${SET_ICON('M6 6l12 12M18 6 6 18')}</button></div>`).join('') : '<div class="empty">Nothing yet. Add a link below.</div>'}</section>
     <label class="sfield"><span>Name</span><input id="tile-name" maxlength="30" placeholder="Photos"></label>
     <label class="sfield"><span>Link</span><input id="tile-url" inputmode="url" placeholder="https://photos.example.com"></label>
