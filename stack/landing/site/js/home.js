@@ -148,7 +148,7 @@ const WI = {
 const wIcon = (k, cls = 'wx-ic') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${WI[k]}</svg>`;
 const wxKind = (code, day = 1) => code <= 1 ? (day ? 'sun' : 'moon') : code === 2 ? (day ? 'part' : 'partn') : code === 3 ? 'cloud' : code <= 48 ? 'fog'
   : code <= 57 ? 'drizzle' : code <= 67 || (code >= 80 && code <= 82) ? 'rain' : code <= 77 || code === 85 || code === 86 ? 'snow' : code >= 95 ? 'storm' : 'cloud';
-const hm = (iso) => iso.slice(11, 16);
+const hm = (iso) => { const h = +iso.slice(11, 13), m = iso.slice(14, 16); return `${h % 12 || 12}${m === '00' ? '' : ':' + m} ${h < 12 ? 'AM' : 'PM'}`; };  // the place's own clock, 12-hour: 4 PM, 6:42 AM
 const compass = (deg) => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(deg / 45) % 8];
 const uvLevel = (u) => u < 3 ? 'Low' : u < 6 ? 'Moderate' : u < 8 ? 'High' : u < 11 ? 'Very high' : 'Extreme';
 const aqiLevel = (a) => a <= 50 ? 'Good' : a <= 100 ? 'Moderate' : a <= 150 ? 'Unhealthy for some' : a <= 200 ? 'Unhealthy' : a <= 300 ? 'Very unhealthy' : 'Hazardous';

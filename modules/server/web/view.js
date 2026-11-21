@@ -415,7 +415,8 @@ function hostSpecsHTML(h, live) {
 
 // ---------- Server actions ----------
 const actMsg = (t, o) => flash($('#act-msg'), t, o);
-// ----- GitHub backup: the hourly sync (homelab-git-sync) and a button that runs one now
+// ----- GitHub backup: the hourly sync (homelab-git-sync) and a button that runs one now.
+// The card shows only once that sync has written its status; on an install without it there is nothing to back up to, so nothing to show.
 let gitB = null, gitBusy = false;
 const gitAgo = (s) => { const m = Math.round((Date.now() / 1000 - s) / 60); return m < 1 ? 'Just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ${m % 60}m ago` : `${Math.floor(m / 1440)} days ago`; };
 const gitClock = (s) => new Date(s * 1000).toLocaleTimeString('en-US', T12);
@@ -433,6 +434,7 @@ function renderGit(x, busy = false) {
 async function loadGit() {
   if (gitBusy) return;
   try { gitB = await getJSON('/api/git-backup.json'); } catch { gitB = null; }
+  $('#gitb').hidden = !gitB;
   if (!gitBusy) renderGit(gitB);
 }
 $('#gitb-go').onclick = async () => {

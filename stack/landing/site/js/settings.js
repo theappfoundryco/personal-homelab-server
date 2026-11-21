@@ -39,6 +39,7 @@ function setLocked(r) {
     <label class="sfield"><span>PIN</span><input id="set-pin" type="password" inputmode="numeric" autocomplete="off"></label>
     <button class="sbtn main" id="set-unlock">Unlock</button>`;
   $('#set-unlock').onclick = async () => { SET.pin = $('#set-pin').value.trim(); try { sessionStorage.setItem('spin', SET.pin); } catch (e) {} setRender(); };
+  $('#set-pin').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#set-unlock').click(); } };  // Enter (or Go on a phone keyboard) unlocks too
 }
 async function setRender() {
   setTitle();
