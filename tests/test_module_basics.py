@@ -285,6 +285,27 @@ class Basics(unittest.TestCase):
         self.assertTrue(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "whisper"})[1]["ok"])
         self.assertEqual(asked, [("add", "whisper")])
 
+    def test_containers_with_tile_labels_get_a_tile(self):
+        import modules.server as m
+        listing = [
+            {"Names": ["/jellyfin"], "State": "running", "Labels": {"homelab.tile.url": "http://192.168.1.20:8096", "homelab.tile.title": "Films",
+                                                                     "homelab.tile.icon": "Jellyfin.png", "homelab.tile.group": "tools"}},
+            {"Names": ["/photos"], "State": "running", "Labels": {"homepage.href": "https://photos.example.com", "homepage.name": "Photos",
+                                                                   "homepage.description": "Family albums", "homepage.icon": "mdi-camera"}},
+            {"Names": ["/plain"], "State": "running", "Labels": {"homelab.tile.url": "http://10.0.0.5:9000"}},
+            {"Names": ["/stopped"], "State": "exited", "Labels": {"homelab.tile.url": "http://10.0.0.5:9001"}},
+            {"Names": ["/mine"], "State": "running", "Labels": {"homelab.custom": "mine", "homelab.tile.url": "http://10.0.0.5:9002"}},
+            {"Names": ["/evil"], "State": "running", "Labels": {"homelab.tile.url": "javascript:alert(1)"}},
+            {"Names": ["/again"], "State": "running", "Labels": {"homepage.href": "http://10.0.0.5:9003", "homepage.name": "photos"}},
+            {"Names": ["/odd"], "State": "running", "Labels": None},
+        ]
+        self.assertEqual(m.labelled_tiles(listing), [
+            {"name": "Films", "sub": "From Docker", "url": "http://192.168.1.20:8096", "icon": "jellyfin", "c": "jellyfin", "group": "tools"},
+            {"name": "Photos", "sub": "Family albums", "url": "https://photos.example.com", "icon": "", "c": "photos", "group": "apps"},
+            {"name": "plain", "sub": "From Docker", "url": "http://10.0.0.5:9000", "icon": "", "c": "plain", "group": "apps"},
+        ])  # stopped ones, your own apps, non-web links and a second tile with the same name are left out
+        self.assertEqual(m.labelled_tiles(None), [])
+
     def test_update_card_compares_versions_and_starts_one_update_through_the_helper(self):
         import json, tempfile
         import modules.server as m

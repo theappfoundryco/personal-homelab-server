@@ -44,7 +44,7 @@ It adapts to the machine it runs on. A setup wizard looks at your hardware and s
 | **News and weather** | Headlines by topic with short AI digests, and forecasts for home or any city. |
 | **Flights and email** | Flights found in your calendar with a "time to leave" nudge, and a short list of important email (off until you add a Gmail app password). |
 | **Telegram bot** | "Remind me to water the plants tomorrow", "any important emails". It answers from your own data. |
-| **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. |
+| **Server and apps** | Is anything down, how hot is the machine, restart an app, read its logs, add your own Docker apps. Any container on the machine can add its own tile with a `homelab.tile.url` label (Homepage's `homepage.href` labels work too). |
 
 <details>
 <summary>More screens</summary>
