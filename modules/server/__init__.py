@@ -40,6 +40,35 @@ def containers():
     return {c["Names"][0].lstrip("/"): c["State"] for c in http(f"{DOCKER}/containers/json?all=1", timeout=10)}
 
 
+# Tiles from Docker labels: a container on this machine with homelab.tile.url (or Homepage's homepage.href) gets a tile on its own.
+# homelab.tile.title / .sub / .icon / .group, or homepage.name / .description / .icon, fill in the rest.
+ICON_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
+
+
+def labelled_tiles(listing):
+    """Tiles for running containers that ask for one with labels. listing: Docker's /containers/json. Never raises on odd labels."""
+    out, seen = [], set()
+    for c in listing or []:
+        lab = c.get("Labels") or {}
+        if not isinstance(lab, dict) or c.get("State", "running") != "running" or _custom.LABEL in lab:  # your own apps already have a tile
+            continue
+        url = str(lab.get("homelab.tile.url") or lab.get("homepage.href") or "").strip()
+        if not re.match(r"^https?://[^\s\"'<>]+$", url) or len(url) > 300:
+            continue
+        name = (c.get("Names") or ["/app"])[0].lstrip("/")
+        title = str(lab.get("homelab.tile.title") or lab.get("homepage.name") or name).strip()[:30]
+        if title.lower() in seen:
+            continue
+        seen.add(title.lower())
+        icon = re.sub(r"\.(png|svg|webp)$", "", str(lab.get("homelab.tile.icon") or lab.get("homepage.icon") or "").strip().lower())
+        if icon.startswith(("mdi-", "si-", "sh-")):  # Homepage's own icon sets: not in the icon set the dashboard uses, so the first letter shows instead
+            icon = ""
+        out.append({"name": title, "sub": str(lab.get("homelab.tile.sub") or lab.get("homepage.description") or "From Docker").strip()[:40],
+                    "url": url, "icon": icon if ICON_NAME.match(icon) else "", "c": name,
+                    "group": "tools" if str(lab.get("homelab.tile.group", "")).strip().lower() == "tools" else "apps"})
+    return sorted(out, key=lambda t: t["name"].lower())
+
+
 TEMP = 'max(node_hwmon_temp_celsius{chip=~".*coretemp.*"})'
 
 
@@ -187,7 +216,8 @@ def catalog():
     core = [{"id": n, "title": "Telegram assistant" if n == "telegram-bot" else app_name(n).split(" (")[0], "state": None if cs is None else cs.get(n, "missing"),
              "memory_now_mb": mem.get(n)} for n in _apps.CORE]
     reboot = safe(lambda: bool(json.load(open(f"{DATA}/agent.json")).get("reboot")), False)
-    return {"apps": out, "core": core, "docker": cs is not None, "helper": not CAPS.missing(["host_agent"]), "reboot": reboot, "working": apps_log_tail()}
+    tiles = safe(lambda: labelled_tiles(http(f"{DOCKER}/containers/json", timeout=5)), []) if cs is not None else []
+    return {"apps": out, "core": core, "labelled": tiles, "docker": cs is not None, "helper": not CAPS.missing(["host_agent"]), "reboot": reboot, "working": apps_log_tail()}
 
 
 def restart_app(name, msg=None):
