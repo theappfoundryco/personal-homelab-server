@@ -284,6 +284,17 @@ class Basics(unittest.TestCase):
         self.assertEqual(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "rm -rf"})[0], 400)
         self.assertTrue(harness.call(base, "POST", "/server/apps/change", {"action": "add", "id": "whisper"})[1]["ok"])
         self.assertEqual(asked, [("add", "whisper")])
+        from unittest import mock
+        from core import casaos
+        from test_casaos import MEDIA, store
+        with mock.patch.object(casaos, "_get", store({"Jellyfin": MEDIA, "Jellyseerr": MEDIA})):
+            code, out = harness.call(base, "POST", "/server/apps/store", {"name": "jelly"})
+            self.assertEqual((code, out["matches"]), (400, ["Jellyfin", "Jellyseerr"]))
+            code, out = harness.call(base, "POST", "/server/apps/store", {"name": "Jellyfin", "port": "8123"})
+        self.assertTrue(out["ok"], out)
+        self.assertIn("Not opened", " ".join(out["notes"]))
+        self.assertEqual(asked[-1], ("add", "jellyfin"))
+        self.assertEqual(json.load(open(os.path.join(d, "custom.json")))["apps"][0]["port"], 8123)
 
     def test_update_card_compares_versions_and_starts_one_update_through_the_helper(self):
         import json, tempfile

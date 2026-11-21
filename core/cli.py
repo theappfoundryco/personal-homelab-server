@@ -225,6 +225,45 @@ def custom_cmd(c, args, inside=None, keep=None, group="apps"):
     return apps_cmd(c, "add", [app["id"]])
 
 
+def store_cmd(c, args, port=None, fetch=None, tags_of=None):
+    """homelab apps store [word] lists or searches the CasaOS app store; homelab apps store add <name> adds one as your own app."""
+    from core import casaos
+    if args[:1] == ["add"]:
+        if len(args) != 2:
+            c.out(f"  stop  Say which: {NAME} apps store add <name>. Find names with: {NAME} apps store <word>")
+            return 2
+        uid, gid = (os.getuid(), os.getgid()) if hasattr(os, "getuid") else (1000, 1000)
+        name, spec, notes = casaos.prepare(args[1], uid, gid, port, fetch, tags_of)
+        if not name:
+            c.out(f"  stop  {spec}")
+            return 2
+        app, why = _custom.check(c.data, spec)
+        if why:
+            c.out(f"  stop  {why}" + (f" Choose another with: {NAME} apps store add {name} --port <number>" if "Port" in why else ""))
+            return 2
+        if not _port_free(app["port"]):
+            c.out(f"  stop  Port {app['port']} is already used on this machine. Choose another with: {NAME} apps store add {name} --port <number>")
+            return 2
+        c.out(f"  {app['title']} from the CasaOS store: {app['image']}, opened on port {app['port']}" + (f", keeping {', '.join([app['keep']] + app.get('more', []))}" if app["keep"] else "") + ".")
+        for n in notes:
+            c.out(f"        {n}")
+        if not c.ask("Add it?"):
+            c.out("  Cancelled. Nothing was added. (Add --yes to skip this question.)")
+            return 1
+        _custom.add(c.data, app)
+        return apps_cmd(c, "add", [app["id"]])
+    names = casaos.apps(fetch)
+    if names is None:
+        c.out("  stop  The CasaOS store cannot be reached (no internet?).")
+        return 1
+    hits = casaos.find(args[0], names) if args else names
+    c.out(f"  {len(hits)} of {len(names)} apps in the CasaOS store" + (f" match {args[0]}:" if args else ":"))
+    for i in range(0, len(hits), 4):
+        c.out("    " + "".join(f"{h:<22}" for h in hits[i:i + 4]).rstrip())
+    c.out(f"  Add one with: {NAME} apps store add <name>. Apps that need more power than apps added here get are refused, with the reason.")
+    return 0
+
+
 def custom_check(c, fetch=None):
     """Asks each registry now whether your apps have a newer version (the assistant does this every Monday by itself)."""
     mine = _custom.load(c.data)
@@ -1062,11 +1101,13 @@ def parser():
     s.add_argument("action", nargs="?", choices=("list", "enable", "disable"), default="list")
     s.add_argument("name", nargs="?")
     s = sub.add_parser("apps", help="list the optional apps, or add or remove them")
-    s.add_argument("action", nargs="?", choices=("list", "add", "remove", "custom"), default="list")
+    s.add_argument("action", nargs="?", choices=("list", "add", "remove", "custom", "store"), default="list")
     s.add_argument("names", nargs="*")
     s.add_argument("--inside", help="custom: the port the app listens on inside its container (default: the same port)")
     s.add_argument("--keep", help="custom: a folder inside the app to keep across restarts and updates, like /config")
     s.add_argument("--tools", action="store_true", help="custom: put its tile under Tools")
+    s.add_argument("--port", help="store add: the port to open it on (default: the one the store gives)")
+    s.add_argument("--yes", action="store_true", help="store add: do not ask first")
     s = sub.add_parser("access", help="who can open the dashboard: lan (home network, needs a PIN) or local")
     s.add_argument("mode", choices=("lan", "local"))
     s = sub.add_parser("config", help="edit config.yaml safely")
@@ -1116,6 +1157,8 @@ def main(argv=None, ctx=None):
         if a.cmd == "access":
             return access(c, a.mode)
         if a.cmd == "apps":
+            if a.action == "store":
+                return store_cmd(c, a.names, a.port)
             if a.action == "custom":
                 return custom_cmd(c, a.names, a.inside, a.keep, "tools" if a.tools else "apps")
             if a.action != "list" and not a.names:

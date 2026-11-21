@@ -185,10 +185,18 @@ async function setAppsPage(body) {
   const keep = SET.custom || {};
   CU_FIELDS.forEach((k) => { const f = $('#cu-' + k); if (!f) return; if (keep[k] != null) f.value = keep[k];
     f.oninput = f.onchange = () => { SET.custom = { ...(SET.custom || {}), [k]: f.value }; }; });  // what is typed stays when the list redraws
+  [['st-name', 'name'], ['st-port', 'portValue']].forEach(([id, k]) => { const f = $('#' + id); if (f) f.oninput = () => { SET.store = { ...(SET.store || {}), [k]: f.value }; }; });
   if (Object.keys(appsBusy).length) appsPoll = setTimeout(() => SET.page === 'apps' && setAppsPage(setHome()), 3000);
 }
 // Your own app: any Docker image pinned to a version, one port, and an optional folder to keep. The server checks it; the host helper starts it.
-const customFormHTML = (docker) => `<div class="sgroup">Add your own</div>
+const customFormHTML = (docker) => `<div class="sgroup">From the CasaOS app store</div>
+  <div class="snote">About 180 apps, ready to go. Type a name, like Jellyfin, Vaultwarden or Memos. Apps that need more power than apps added here get are refused, with the reason. <a href="https://github.com/IceWhaleTech/CasaOS-AppStore/tree/main/Apps" target="_blank" rel="noopener">See them all</a></div>
+  <label class="sfield"><span>App name</span><input id="st-name" placeholder="Jellyfin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(SET.store?.name || '')}"></label>
+  <label class="sfield"${SET.store?.port ? '' : ' hidden'} id="st-port-row"><span>Port</span><input id="st-port" inputmode="numeric" maxlength="5" placeholder="8097" value="${esc(SET.store?.portValue || '')}"></label>
+  <div class="sfield bad"><div class="why" id="st-why">${esc(SET.store?.why || '')}</div></div>
+  ${SET.store?.notes?.length ? `<div class="snote">${SET.store.notes.map(esc).join('<br>')}</div>` : ''}
+  <button class="sbtn main" id="st-add"${docker ? '' : ' disabled'}>Add from the store</button>
+  <div class="sgroup">Add your own</div>
   <div class="snote">Any app that comes as a Docker image. It gets a tile on the Server page, and Remove keeps its saved data.</div>
   <label class="sfield"><span>Name</span><input id="cu-title" maxlength="30" placeholder="Media server" autocomplete="off"></label>
   <label class="sfield"><span>Image and version</span><input id="cu-image" placeholder="jellyfin/jellyfin:10.10.7" autocapitalize="off" autocorrect="off" spellcheck="false"><div class="hint">Pin a version (not latest), so it only changes when you change it.</div></label>
@@ -209,6 +217,18 @@ async function customAdd() {
   if (r.ok) { appsBusy[r.id] = 'add'; SET.custom = null; if (typeof loadInstalled === 'function') setTimeout(loadInstalled, 4000); }
   else if (r.saved) { SET.custom = null; SET.appsFail = { msg: r.msg, cmds: r.cmds }; }
   else SET.customWhy = r.msg || r.error || 'That did not work.';
+  setAppsPage(setHome());
+}
+async function storeAdd() {
+  const name = $('#st-name').value.trim(), port = ($('#st-port')?.value || '').trim();
+  SET.store = { name, portValue: port, port: SET.store?.port };
+  if (!name) { $('#st-why').textContent = 'Type the name of an app from the store.'; return; }
+  const btn = $('#st-add'); btn.disabled = true; btn.textContent = 'Fetching\u2026';
+  const r = await setApi('/server/apps/store', { name, port: port || undefined });
+  SET.appsFail = null;
+  if (r.ok) { appsBusy[r.id] = 'add'; SET.store = { notes: [r.msg, ...(r.notes || [])] }; if (typeof loadInstalled === 'function') setTimeout(loadInstalled, 4000); }
+  else if (r.saved) { SET.store = { notes: r.notes }; SET.appsFail = { msg: r.msg, cmds: r.cmds }; }
+  else SET.store = { ...SET.store, why: r.msg || r.error || 'That did not work.', port: SET.store.port || r.port };
   setAppsPage(setHome());
 }
 async function appsChange(action, id) {
@@ -436,6 +456,7 @@ $('#set-body').addEventListener('click', async (e) => {
   if (t.id === 'set-layout-save') return setSave({ 'dashboard.tabs': SET.layout.tabs.filter((x) => x !== 'home'), 'dashboard.tabs_hidden': [...SET.layout.hidden], 'dashboard.home_hidden': [...SET.layout.home] });
   if (t.dataset.delTile != null) { SET.tiles.own.splice(+t.dataset.delTile, 1); return setTilesPage(setHome(), ''); }
   if (t.id === 'cu-add') return customAdd();
+  if (t.id === 'st-add') return storeAdd();
   if (t.id === 'tile-add') {
     const name = $('#tile-name').value.trim(), url = $('#tile-url').value.trim(), why = $('#tile-why');
     if (!name) { why.textContent = 'Give the tile a name.'; return; }

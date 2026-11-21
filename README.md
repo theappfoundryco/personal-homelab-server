@@ -71,6 +71,8 @@ You pick them during setup or later with `homelab apps`. Nothing is installed th
 
 You can add any other Docker image as your own app, pinned to a version. Every Monday the assistant asks its registry whether a newer version is out and says so in the morning recap and in Settings, Apps. It never updates anything by itself.
 
+Or add one from the [CasaOS app store](https://github.com/IceWhaleTech/CasaOS-AppStore) by name, in Settings, Apps or with `homelab apps store add Jellyfin`. Its file is fetched when you ask. Only what an added app is allowed (one container, its web page port, the folders that hold its own data) is taken, and anything left out is listed.
+
 | App | What it is for |
 |---|---|
 | Local AI engine (Ollama) | Runs AI models on this machine for chat, journal summaries and news. |
@@ -134,6 +136,7 @@ If `homelab` is not found, run `~/personal-homelab-server/bin/homelab path add` 
 | `homelab doctor` | the full health check, with a fix for each problem |
 | `homelab modules` | list modules, or turn one on or off |
 | `homelab apps` | list the optional apps, or add or remove them |
+| `homelab apps store [word]`, `homelab apps store add <name>` | search the CasaOS app store (about 180 apps) and add one as your own app; anything that needs more power than that is refused, with the reason |
 | `homelab apps custom add`, `check`, `update <name> [version]` | add any Docker image as your own app, see whether a newer version is out, and move to it (it goes back if the new one will not start) |
 | `homelab backup`, `homelab restore` | save your data and settings to one file, bring it back |
 | `homelab access` | who can open the dashboard: this machine only, or your home network with a PIN |
