@@ -191,11 +191,82 @@ class Installer(unittest.TestCase):
     def test_linux_without_docker_uses_the_official_installer(self):
         self.without("docker")
         self.stub("sudo", table=EXTRA)
-        self.run_it("--no-open")
+        self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-24.04"))
         calls = self.calls()
         self.assertIn("get.docker.com", calls)
         self.assertIn("sudo systemctl enable --now docker", calls)
         self.assertIn("sudo usermod -aG docker", calls)
+
+    def test_linux_docker_source_in_the_installer_agrees_with_the_app_for_every_distribution(self):
+        import sys
+        sys.path.insert(0, ROOT)
+        from core.hardware import system
+        fix = os.path.join(ROOT, "tests", "fixtures", "os-release")
+        extra = {"mint": 'ID=linuxmint\nID_LIKE="ubuntu debian"\nPRETTY_NAME="Linux Mint 21.3"\nUBUNTU_CODENAME=jammy\n', "debian-fork": 'ID=example\nID_LIKE=debian\nPRETTY_NAME="Example OS"\n',
+                 "nixos": "ID=nixos\n", "gentoo": "ID=gentoo\n", "unknown": 'ID=plan9\nPRETTY_NAME="Plan 9"\n', "empty": ""}
+        cases = {n: open(os.path.join(fix, n)).read() for n in os.listdir(fix)} | extra
+        fn = "".join(subprocess.run(["sed", "-n", f"/^{f}() {{/,/^}}/p", os.path.join(ROOT, "install.sh")], capture_output=True, text=True).stdout for f in ("os_info", "docker_plan"))
+        for name, text in cases.items():
+            p = os.path.join(self.tmp, "os-release-" + name)
+            open(p, "w").write(text)
+            out = subprocess.run(["bash", "-c", fn + '\nNAME=Alex; docker_plan; printf "%s\\n%s\\n%s\\n%s" "$DK_HOW" "$DK_CMD" "$DK_NOTE" "$NAME"'],
+                                 env={"PATH": os.environ["PATH"], "HL_OS_RELEASE": p}, capture_output=True, text=True).stdout.split("\n")
+            self.assertEqual(tuple(out[:3]), system.docker_source(system.parse_os_release(text)), name)
+            self.assertEqual(out[3], "Alex", name)  # reading os-release never touches the installer's own NAME
+
+    def test_arch_without_docker_uses_its_own_packages_and_nixos_stops_with_what_to_do(self):
+        self.without("docker")
+        self.stub("sudo", table=EXTRA)
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "archlinux"))
+        self.assertIn("from Arch Linux's own packages", out)
+        self.assertIn("sudo pacman -S --needed --noconfirm docker docker-compose docker-buildx", self.calls())
+        self.assertNotIn("get.docker.com", self.calls())
+        nix = os.path.join(self.tmp, "nixos")
+        open(nix, "w").write("ID=nixos\nPRETTY_NAME=NixOS\n")
+        open(self.log, "w").close()
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=nix)
+        self.assertEqual(rc, 1)
+        self.assertIn("virtualisation.docker.enable = true;", out)
+        self.assertNotIn("sudo", self.calls())
+
+    def test_a_minimal_linux_without_python_gets_it_from_its_own_packages(self):
+        self.without("python3")
+        self.stub("sudo", table=EXTRA)
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "alpine-3.20"))
+        self.assertIn("Python 3 is needed by the homelab command and the host helper.", out)
+        self.assertIn("Python 3 installed", out)
+        self.assertIn("sudo apk add python3 py3-yaml", self.calls())
+        self.assertIn("python-linux yes", open(os.path.join(self.home, "installed.txt")).read())
+
+    def test_a_new_docker_group_without_sg_says_to_log_in_again(self):
+        self.stub("docker", table={"docker": 'case "$1 $2" in "compose version") exit 0;; "info "*) echo "permission denied while trying to connect to the Docker daemon socket" >&2; exit 1;; esac; exit 0'})
+        rc, out = self.run_it("--no-open")
+        self.assertEqual(rc, 1)
+        self.assertIn("this login started before your user joined the docker group. Log out and back in (or run: newgrp docker)", out)
+
+    def test_a_new_docker_group_with_sg_continues_in_that_group(self):
+        # pipefail used to hide the "permission denied" match, so this never ran
+        self.stub("docker", table={"docker": 'case "$1 $2" in "compose version") exit 0;; "info "*) [ "$HL_REEXEC" = 1 ] && exit 0; echo "permission denied" >&2; exit 1;; esac; exit 0'})
+        self.stub("sg", table={"sg": 'echo "sg $*" >> "$FAKE_LOG"; exit 0'})
+        rc, out = self.run_it("--no-open")
+        self.assertIn("Your user was just added to the docker group; continuing with it", out)
+        self.assertIn("sg docker -c", self.calls())
+        rc, out = self.run_it("--no-open", HL_REEXEC="1")  # what the re-run inside sg prints at the end
+        self.assertIn("Open a new terminal (or log out and back in) before you use", out)
+
+    def test_no_sudo_says_how_to_get_it_instead_of_command_not_found(self):
+        self.without("python3", "docker")  # a minimal Debian: no Python, no Docker, no sudo
+        rc, out = self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "debian-12"))
+        self.assertEqual(rc, 1)
+        self.assertIn("Installing Python 3 needs sudo, which is not on this machine.", out)
+        self.assertNotIn("command not found", out)
+
+    def test_ubuntu_20_04_gets_docker_from_ubuntu_packages(self):
+        self.without("docker")
+        self.stub("sudo", table=EXTRA)
+        self.run_it("--no-open", HL_OS_RELEASE=os.path.join(ROOT, "tests", "fixtures", "os-release", "ubuntu-20.04"))
+        self.assertIn("apt-get install -y docker.io docker-compose-v2", self.calls())
+        self.assertNotIn("get.docker.com", self.calls())
 
     def test_your_name_and_time_zone_are_written_the_first_time_only(self):
         rc, out = self.run_it("--no-open", HL_NAME='Sa"m \\ Lee')
