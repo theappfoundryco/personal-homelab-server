@@ -894,7 +894,7 @@ def _uninstall_plan(c, purge):
         keep.append(f"Backups in {c.backups}")
     else:
         keep += [f"Your data in {c.data} (homelab uninstall --purge deletes it)", "Downloaded app images and AI models", "Homebrew packages this program installed (--purge removes them)"]
-    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker"}[k] for k, _ in rec if k in manifest.SHARED]
+    shared = [{"homebrew": "Homebrew", "docker-linux": "Docker", "python-linux": "Python 3"}[k] for k, _ in rec if k in manifest.SHARED]
     if shared:
         keep.append(" and ".join(shared) + ": other programs use it, so it stays")
     keep.append(f"This folder ({c.root}); delete it yourself when you are done")
