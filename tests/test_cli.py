@@ -434,6 +434,10 @@ class Everyday(Base):
         self.assertEqual(json.load(open(os.path.join(self.data, "access.json")))["url"], "http://192.168.1.20:3999")
         self.assertEqual(self.go("access", "local"), 0)
         self.assertEqual(open(os.path.join(self.app, "stack", ".env")).read().count("HL_BIND="), 1)
+        cli._apps.save(self.data, ["ntfy"])
+        self.fake.calls.clear()
+        self.assertEqual(self.go("access", "lan"), 0)
+        self.assertIn("compose up -d landing ntfy", self.fake.calls)  # your phone subscribes to ntfy, so it follows the dashboard
 
     def test_nightly_backup_keeps_only_the_newest(self):
         dest = os.path.join(self.tmp, "nightly")
